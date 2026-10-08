@@ -1,0 +1,27 @@
+build/
+.gradle/
+# Parent compile jars (copied from DEVBOX). Not Git source.
+lib/
+libs/
+lib/*.jar
+libs/*.jar
+mods/
+temp/
+run/
+out/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+.idea/
+*.iml
+.vscode/
+*.log
+.DS_Store
+Thumbs.db
+
+# Agent / AI tooling (local only — do not sync to GitHub)
+.agents/
+.cursor/
+.claude/
+CLAUDE.md
+AGENTS.md
+implementation_plan.md

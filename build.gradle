@@ -1,0 +1,109 @@
+plugins {
+    id 'java'
+    id 'xyz.wagyourtail.unimined' version '1.4.17-kappa'
+}
+
+group = 'com.apocollis.lazychunks'
+version = '0.2'
+base {
+    archivesName.set('LazyChunks')
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+}
+
+unimined.minecraft {
+    version '1.12.2'
+
+    mappings {
+        mcp('stable', '39-1.12')
+    }
+
+    cleanroom {
+        loader('0.5.7-alpha')
+    }
+
+    defaultRemapJar = true
+}
+
+repositories {
+    mavenCentral()
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes([
+            "Specification-Title": "lazychunks",
+            "Specification-Vendor": "apocollis",
+            "Specification-Version": "1",
+            "Implementation-Title": project.name,
+            "Implementation-Version": "${version}",
+            "Implementation-Vendor": "apocollis",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+            "ModType": "CRL",
+            "FMLCorePluginContainsFMLMod": "true",
+            "ForceLoadAsMod": "true",
+            "MixinConfigs": "mixins.lazychunks.early.json"
+        ])
+    }
+}
+
+processResources {
+    inputs.property 'version', version
+    filesMatching('mcmod.info') {
+        expand(version: project.version)
+    }
+}
+
+tasks.register('verifyReleaseJar') {
+    dependsOn 'remapJar'
+    doLast {
+        def jarFile = layout.buildDirectory.file("libs/LazyChunks-${version}.jar").get().asFile
+        if (!jarFile.exists()) {
+            throw new GradleException("Missing remapped jar: ${jarFile}")
+        }
+        def modSource = file('src/main/java/com/apocollis/lazychunks/LazyChunks.java').text
+        if (!modSource.contains("VERSION = \"${version}\"")) {
+            throw new GradleException("LazyChunks.VERSION does not match build.gradle version ${version}")
+        }
+        def zip = new java.util.zip.ZipFile(jarFile)
+        try {
+            if (zip.getEntry("mixins.lazychunks.refmap.json") == null) {
+                throw new GradleException("mixins.lazychunks.refmap.json missing from ${jarFile.name}")
+            }
+            if (zip.getEntry("mixins.lazychunks.early.json") == null) {
+                throw new GradleException("mixins.lazychunks.early.json missing from remapped jar")
+            }
+            zip.entries().each { e ->
+                if (!e.name.endsWith(".class")) {
+                    return
+                }
+                def stream = zip.getInputStream(e)
+                def bytes = stream.readAllBytes()
+                stream.close()
+                int major = ((bytes[6] & 0xff) << 8) | (bytes[7] & 0xff)
+                if (major != 65) {
+                    throw new GradleException(
+                            "${e.name} class major ${major}, expected 65 (Java 21). Do not change options.release.")
+                }
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'verifyReleaseJar'
+}
