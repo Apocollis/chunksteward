@@ -1,0 +1,31 @@
+# Operator commands
+
+`/chunksteward <subcommand>`, permission level 2 (operators; in singleplayer cheats must be on). Everything is read-only except the session switches (`log`, `pregen`) and the hotspot edits (`hotspots add|remove|reset`). Nothing here touches world generation itself.
+
+## Information
+
+| Command | Shows |
+| --- | --- |
+| `status` | version, which features are on, tick average, populate queue size, held chunks, chunks waiting for players, stage 2 hotspots and total pregenerated against the warning and limit, what stage 2 is doing now and its last hold-off reason |
+| `chunkinfo [x z]` | for the chunk you stand in, or the given chunk coordinates: loaded, terrain-populated, light-populated, on disk, queued for populate, terrain-only preload chunk, held by Chunk Steward (ticks left), watched by a player, Forge tickets and their owner mods. The quick answer to "does this chunk have a hole?" |
+| `queue` | populate queue size and the first 10 entries |
+| `holds` | held chunks (preload, cascades, stage 2) and when the oldest hold ends |
+
+## Troubleshooting
+
+| Command | Does |
+| --- | --- |
+| `log <seconds>` | sets the status log interval for this session (0 = off); not saved to the config |
+| `pregen pause` / `pregen resume` | pauses or resumes preload and stage 2 for this session, to rule them out |
+
+## Hotspots
+
+| Command | Does |
+| --- | --- |
+| `hotspots list` | hotspots in your dimension: id, chunk and block coordinates, source (bed, dwell, manual), ring progress or done, chunks generated and populated, minutes since last worked; sorted by distance from you |
+| `hotspots here` | dwell in your cell and the 3x3 around it against the threshold, whether a hotspot is within the merge radius, and the five cells with the most dwell (for tuning `dwellMinutes`) |
+| `hotspots add [x z]` | adds a manual hotspot at your chunk or the given chunk coordinates (merged into an existing one within `mergeRadiusChunks`) |
+| `hotspots remove <id>` | removes the record and the dwell counters around it, so the same stay does not create it again. Generated chunks are kept |
+| `hotspots reset <id>` | restarts the hotspot's ring progress; existing chunks are only loaded and skipped |
+
+Tab completion covers the subcommands.

@@ -43,6 +43,18 @@ public abstract class MixinChunk {
         StageGate.populateExit((Chunk) (Object) this);
     }
 
+    @Inject(method = "populate(Lnet/minecraft/world/gen/IChunkGenerator;)V", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/gen/IChunkGenerator;populate(II)V"))
+    private void chunksteward$generatorPopulateStart(IChunkGenerator generator, CallbackInfo ci) {
+        GenMetrics.enter(GenMetrics.GEN_POPULATE);
+    }
+
+    @Inject(method = "populate(Lnet/minecraft/world/gen/IChunkGenerator;)V", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/gen/IChunkGenerator;populate(II)V", shift = At.Shift.AFTER))
+    private void chunksteward$generatorPopulateEnd(IChunkGenerator generator, CallbackInfo ci) {
+        GenMetrics.exit(GenMetrics.GEN_POPULATE);
+    }
+
     @Inject(method = "checkLight()V", at = @At("HEAD"), cancellable = true)
     private void chunksteward$lightHead(CallbackInfo ci) {
         Chunk self = (Chunk) (Object) this;

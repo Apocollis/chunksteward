@@ -112,6 +112,9 @@ public final class IdlePreload {
             STATES.clear();
             return;
         }
+        if (Pregen.paused) {
+            return;
+        }
         List<EntityPlayerMP> players = server.getPlayerList().getPlayers();
         for (EntityPlayerMP player : players) {
             track(player);
@@ -152,6 +155,12 @@ public final class IdlePreload {
                 return;
             }
         }
+    }
+
+    /** The player's preload queue has been built and emptied: stage 2 may start for them. */
+    static boolean stage1Done(EntityPlayerMP player) {
+        PlayerState state = STATES.get(player.getUniqueID());
+        return state != null && state.queue != null && state.queue.isEmpty();
     }
 
     private static int tierOf(EntityPlayerMP player, PlayerState state, ChunkStewardConfig.Preload cfg) {

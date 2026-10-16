@@ -14,6 +14,9 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 | Direction-weighted chunk order, re-sort on turning | [ordering.md](ordering.md) |
 | Preload: idle and moving tiers, terrain-only ring | [idle-preload.md](idle-preload.md) |
 | Populate budgeting, cascade handling | [populate.md](populate.md) |
+| Stage 2 home-area pregen: hotspots, dwell, saved data | [stage2.md](stage2.md) |
+| Operator commands | [commands.md](commands.md) |
+| Pacing API for other mods | [api.md](api.md) |
 | Random-tick guard | [random-ticks.md](random-ticks.md) |
 | Stage gate: populate suppression, light deferral | [stage-gate.md](stage-gate.md) |
 | Status log metrics | [metrics.md](metrics.md) |
@@ -36,6 +39,9 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 | `MixinWorldServer` | `func_147456_g` HEAD/RETURN | brackets the random-tick pass |
 | `AccessorPlayerChunkMap` | `field_72698_e` (get) | view distance for preload radii |
 | `MixinGameRegistry` | `@Redirect` of `IWorldGenerator.generate` inside Forge `GameRegistry.generateWorld` (`remap = false`) | per-generator timing |
+| `MixinMapGenBase` | `MapGenBase.func_186125_a` HEAD/RETURN | terrain-stage map-gen timing by class (caves, ravines, structure layout) |
+| `MixinMapGenStructure` | `MapGenStructure.func_175794_a` HEAD/RETURN | structure paste timing by class (inside populate) |
+| `MixinChunk` | `IChunkGenerator.func_185931_b` INVOKE, before and after, inside `func_186034_a` | generator populate timing (decoration and structure paste, apart from mod world generators) |
 | `MixinMinecraftServer` | `func_71217_p` HEAD/RETURN, `func_71267_a` HEAD | tick timing, save notice |
 
 `Chunk.onTick` is not hooked: Somnia's coremod rewrites its `checkLight()` call into `SomniaUtil.chunkLightCheck(Chunk)` (overwritten by Arcana Quest Tweaks with a 20-tick throttle for distant chunks), and a redirect there failed at boot in 0.2's first build.

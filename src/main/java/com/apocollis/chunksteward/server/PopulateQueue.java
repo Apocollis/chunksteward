@@ -83,6 +83,19 @@ final class PopulateQueue {
         }
     }
 
+    /** Up to {@code limit} queued chunks as {dimension, x, z}. */
+    static java.util.List<int[]> sample(int limit) {
+        java.util.List<int[]> out = new java.util.ArrayList<>();
+        for (Map.Entry<Integer, Dim> e : DIMS.entrySet()) {
+            LongArrayList list = e.getValue().list;
+            for (int i = 0; i < list.size() && out.size() < limit; i++) {
+                long key = list.getLong(i);
+                out.add(new int[] {e.getKey(), (int) key, (int) (key >> 32)});
+            }
+        }
+        return out;
+    }
+
     static boolean isDraining() {
         return draining;
     }

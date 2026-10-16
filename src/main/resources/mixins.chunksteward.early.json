@@ -10,6 +10,8 @@
     "MixinChunk",
     "MixinChunkProviderServer",
     "MixinGameRegistry",
+    "MixinMapGenBase",
+    "MixinMapGenStructure",
     "MixinMinecraftServer",
     "MixinPlayerChunkMap",
     "MixinPlayerChunkMapEntry",

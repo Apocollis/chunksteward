@@ -58,6 +58,8 @@ public final class StageGate {
 
     // Terrain-only populate suppression.
     private static boolean preloading;
+    /** Stage 2 is loading chunks to populate them (see {@link Stage2Pregen}); its populates skip the budget deferral. */
+    private static boolean stage2Active;
     private static int preloadDim;
     private static final Map<Integer, LongOpenHashSet> TERRAIN_ONLY = new HashMap<>();
 
@@ -134,7 +136,7 @@ public final class StageGate {
                 || !Dimensions.applies(dim)) {
             return true;
         }
-        if (populateDepth == 0 && PopulateQueue.isDraining()) {
+        if (populateDepth == 0 && (PopulateQueue.isDraining() || stage2Active)) {
             return true;
         }
         if (populateDepth == 0 && ticketExempt(world, chunk.x, chunk.z)) {
@@ -234,7 +236,7 @@ public final class StageGate {
         if (Thread.currentThread() != TickMonitor.serverThread) {
             return;
         }
-        if (!preloading) {
+        if (!preloading && !stage2Active) {
             TickMonitor.countExternalGen();
         }
         if (populateDepth > 0) {
@@ -247,7 +249,22 @@ public final class StageGate {
         }
     }
 
+    static void beginStage2() {
+        stage2Active = true;
+    }
+
+    static void endStage2() {
+        stage2Active = false;
+    }
+
+    /** The chunk was generated terrain-only by preload or stage 2 this session and is still unpopulated. */
+    static boolean isTerrainOnly(int dim, int x, int z) {
+        LongOpenHashSet set = TERRAIN_ONLY.get(dim);
+        return set != null && set.contains(ChunkPos.asLong(x, z));
+    }
+
     static void onTickStart() {
+        stage2Active = false;
         populateDepth = 0;
         java.util.Arrays.fill(FRAMES, null);
         populatesThisTick = 0;

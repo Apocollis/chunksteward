@@ -83,11 +83,12 @@ public final class TickMonitor {
             lastLogNanos = now;
             ChunkSteward.LOGGER.info("status: tick avg {} ms (non-chunk {} ms, chunk {} ms), chunks generated {}, "
                             + "deferred {}, bypassed {} (max emergency radius {}), waiting {}, preloaded {} "
-                            + "(+{} terrain-only); {}; {}; {}",
+                            + "(+{} terrain-only); {}; {}; {}; {}",
                     String.format("%.1f", totalEmaMs), String.format("%.1f", otherEmaMs),
                     String.format("%.1f", chunkEmaMs), statGenerated, statSkipped, statBypassed,
                     statMaxEmergencyRadius, waitingNow(), statPreloaded, statPreloadedTerrainOnly,
-                    StageGate.reportAndReset(), IdlePreload.reportAndReset(), RandomTickGuard.reportAndReset());
+                    StageGate.reportAndReset(), IdlePreload.reportAndReset(), Stage2Pregen.reportAndReset(),
+                    RandomTickGuard.reportAndReset());
             ChunkSteward.LOGGER.info("status: {}", GenMetrics.reportAndReset());
             statGenerated = statSkipped = statBypassed = statPreloaded = statPreloadedTerrainOnly = 0L;
             statMaxEmergencyRadius = 0;

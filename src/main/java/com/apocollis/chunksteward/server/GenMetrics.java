@@ -4,6 +4,7 @@ import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import net.minecraft.server.management.PlayerChunkMapEntry;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,43 @@ public final class GenMetrics {
     public static final Object TERRAIN = "terrain";
     public static final Object POPULATE = "populate";
     public static final Object LIGHT = "light";
+    /** The chunk generator's own populate call: decoration and structure paste, but not mod world generators. */
+    public static final Object GEN_POPULATE = "generator populate";
+
+    /** A structure paste or terrain map-gen frame, keyed by the runtime class. */
+    public static final class Key {
+        final boolean structure;
+        final String label;
+
+        Key(boolean structure, String label) {
+            this.structure = structure;
+            this.label = label;
+        }
+    }
+
+    private static final ClassValue<Key> STRUCTURE_KEYS = new ClassValue<Key>() {
+        @Override
+        protected Key computeValue(Class<?> type) {
+            return new Key(true, type.getName());
+        }
+    };
+
+    private static final ClassValue<Key> MAPGEN_KEYS = new ClassValue<Key>() {
+        @Override
+        protected Key computeValue(Class<?> type) {
+            return new Key(false, type.getName());
+        }
+    };
+
+    /** The frame key for {@code MapGenStructure.generateStructure} on this class (one object per class). */
+    public static Object structureKey(Class<?> type) {
+        return STRUCTURE_KEYS.get(type);
+    }
+
+    /** The frame key for {@code MapGenBase.generate} (caves, ravines, structure layout) on this class. */
+    public static Object mapGenKey(Class<?> type) {
+        return MAPGEN_KEYS.get(type);
+    }
 
     private static final int MAX_DEPTH = 64;
     private static final Object[] STACK = new Object[MAX_DEPTH];
@@ -140,42 +178,57 @@ public final class GenMetrics {
 
     /** One-line summary of the interval, then reset. */
     static String reportAndReset() {
-        long[] terrain = ACCUM.getOrDefault(TERRAIN, new long[2]);
-        long[] populate = ACCUM.getOrDefault(POPULATE, new long[2]);
+        long[] terrainExcl = ACCUM.getOrDefault(TERRAIN, new long[2]);
+        long[] populateExcl = ACCUM.getOrDefault(POPULATE, new long[2]);
+        long[] genPopulate = ACCUM.getOrDefault(GEN_POPULATE, new long[2]);
         long[] light = ACCUM.getOrDefault(LIGHT, new long[2]);
         long genNanos = 0L;
+        long structNanos = 0L;
+        long mapGenNanos = 0L;
         List<Map.Entry<Object, long[]>> gens = new ArrayList<>();
+        List<Map.Entry<Object, long[]>> structures = new ArrayList<>();
+        List<Map.Entry<Object, long[]>> mapGens = new ArrayList<>();
         for (Map.Entry<Object, long[]> e : ACCUM.entrySet()) {
-            if (e.getKey() instanceof Class) {
+            Object key = e.getKey();
+            if (key instanceof Class) {
                 gens.add(e);
                 genNanos += e.getValue()[0];
+            } else if (key instanceof Key) {
+                if (((Key) key).structure) {
+                    structures.add(e);
+                    structNanos += e.getValue()[0];
+                } else {
+                    mapGens.add(e);
+                    mapGenNanos += e.getValue()[0];
+                }
             }
         }
-        gens.sort((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]));
+        Comparator<Map.Entry<Object, long[]>> byTime = (a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]);
+        gens.sort(byTime);
+        structures.sort(byTime);
+        mapGens.sort(byTime);
 
+        // Exclusive times: every nanosecond is charged to the innermost frame, so the parts add up to the stage.
+        long populateTotal = populateExcl[0] + genPopulate[0] + genNanos + structNanos;
+        long terrainTotal = terrainExcl[0] + mapGenNanos;
         StringBuilder sb = new StringBuilder();
-        sb.append("stages: terrain ").append(ms(terrain[0])).append(" ms/").append(terrain[1])
-                .append(", populate ").append(ms(populate[0] + genNanos)).append(" ms/").append(populate[1])
-                .append(" (world generators ").append(ms(genNanos)).append(" ms)")
+        sb.append("stages: terrain ").append(ms(terrainTotal)).append(" ms/").append(terrainExcl[1])
+                .append(" (map-gens ").append(ms(mapGenNanos)).append(" ms)")
+                .append(", populate ").append(ms(populateTotal)).append(" ms/").append(populateExcl[1])
+                .append(" (generator populate ").append(ms(genPopulate[0])).append(" ms, structures ")
+                .append(ms(structNanos)).append(" ms, world generators ").append(ms(genNanos))
+                .append(" ms, other ").append(ms(populateExcl[0])).append(" ms)")
                 .append(", light ").append(ms(light[0])).append(" ms/").append(light[1])
                 .append("; wait avg ").append(waitSamples == 0 ? "-" : ms(waitNanosTotal / waitSamples))
                 .append(" ms max ").append(waitSamples == 0 ? "-" : ms(waitNanosMax))
                 .append(" ms over ").append(waitSamples).append(" chunks");
-        int top = Math.min(ChunkStewardConfig.logging.topGenerators, gens.size());
-        if (top > 0) {
-            sb.append("; top generators:");
-            for (int i = 0; i < top; i++) {
-                Map.Entry<Object, long[]> e = gens.get(i);
-                sb.append(' ').append(((Class<?>) e.getKey()).getName()).append(' ')
-                        .append(ms(e.getValue()[0])).append(" ms/").append(e.getValue()[1]);
-                if (i + 1 < top) {
-                    sb.append(',');
-                }
-            }
-        }
+        int top = ChunkStewardConfig.logging.topGenerators;
+        appendTop(sb, "top generators", gens, top);
+        appendTop(sb, "structures", structures, top);
+        appendTop(sb, "map-gens", mapGens, top);
         if (!CASCADES.isEmpty()) {
             List<Map.Entry<Object, long[]>> casc = new ArrayList<>(CASCADES.entrySet());
-            casc.sort((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]));
+            casc.sort(byTime);
             sb.append("; cascades by generator:");
             for (int i = 0; i < Math.min(3, casc.size()); i++) {
                 Object k = casc.get(i).getKey();
@@ -190,6 +243,25 @@ public final class GenMetrics {
             CREATED.clear();
         }
         return sb.toString();
+    }
+
+    /** "; label: name X ms/N, ..." for the first {@code top} entries (class names or {@link Key} labels). */
+    private static void appendTop(StringBuilder sb, String label, List<Map.Entry<Object, long[]>> entries, int top) {
+        int n = Math.min(top, entries.size());
+        if (n <= 0) {
+            return;
+        }
+        sb.append("; ").append(label).append(':');
+        for (int i = 0; i < n; i++) {
+            Map.Entry<Object, long[]> e = entries.get(i);
+            Object key = e.getKey();
+            String name = key instanceof Class ? ((Class<?>) key).getName() : ((Key) key).label;
+            sb.append(' ').append(name).append(' ').append(ms(e.getValue()[0])).append(" ms/")
+                    .append(e.getValue()[1]);
+            if (i + 1 < n) {
+                sb.append(',');
+            }
+        }
     }
 
     private static String ms(long nanos) {

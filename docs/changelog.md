@@ -10,6 +10,15 @@
 - Ticket exemption: a chunk held by a Forge chunk ticket owned by a mod in `populate.ticketExemptMods` (default `roguelike`) populates at once and is taken out of the queue, so Roguelike's dungeon build job is never racing a later queue populate. Counted as `ticket-exempt` in the status log. Cascades are never exempt.
 - Held chunks (preload and cascades) share `ChunkHolds` and are never released while a player watches them or a Forge ticket owns them.
 - Status log: populate queue, cascades by generator, held chunks, preload tiers and yields, random-tick guard counts and sources.
+- Stage 2, home-area pregen (`stage2.enabled`, default on). Hotspots are a player's bed or respawn point, or any place where players have stayed about `dwellMinutes` (10) in total. Dwell is sampled every 10 s against a fixed anchor (32 blocks): within it the sample is credited to the player's 8x8-chunk cell, beyond it the anchor moves; a 3x3 block of cells reaching the threshold creates a hotspot at its dwell-weighted centroid. Counters are saved with the world and resume after a player leaves and returns. See `docs/stage2.md`.
+- While a player is near a hotspot, after their preload queue has finished and while the server has room (the same hold-offs as preload), the area is generated terrain-only out to `radiusTerrain` (30), then populated out to `radiusFull` (20), one operation every 4 ticks. Progress is saved per hotspot and resumes after a restart.
+- No cap on hotspots: `warnTotalChunks` (100,000) warns, `maxTotalChunks` (0 = none) can limit total chunks generated. Hotspots within `mergeRadiusChunks` (8) merge.
+- Saved data: `chunksteward_hotspots` per dimension (`WorldSavedData`).
+- Operator commands `/chunksteward` (status, chunkinfo, queue, holds, log, pregen, hotspots list/here/add/remove/reset). See `docs/commands.md`.
+- Stage 2 populates pass the populate budget deferral through `StageGate.beginStage2()`; stage 2's own generation is not counted as busy generation.
+- Status log: `stage2 hotspots N, generated, populated, yielded (last reason), total`.
+- Populate and structure attribution in the status log: the populate stage is split into generator populate, structures (by `MapGenStructure` class), world generators and other; the terrain stage lists `MapGenBase` map-gens by class (caves, ravines, structure layout). Plain HEAD/RETURN injects on vanilla classes. See `docs/metrics.md`.
+- Pacing API for other mods: `com.apocollis.chunksteward.api.ChunkStewardAPI` (average tick ms, headroom, remaining budget in the current tick, server-behind, generating-chunks, populate queue size). Read-only, additive. See `docs/api.md`.
 
 ## 0.2
 - Direction-weighted order for missing chunks: distance penalised by angle from the player's view direction (still) or travel direction (fast); cached scores, stable sort; `directionPenalty = 0` is vanilla order. Re-sort when a player turns past `resortAngleDegrees`.

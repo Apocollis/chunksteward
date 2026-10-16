@@ -65,6 +65,22 @@ public final class ChunkHolds {
         return HELD.size();
     }
 
+    /** Ticks until the chunk's hold ends, or -1 if it is not held. */
+    static int holdRemaining(int dim, int x, int z) {
+        for (Held held : HELD) {
+            if (held.dim == dim && held.x == x && held.z == z) {
+                return Math.max(0, held.dueTick - TickMonitor.tick);
+            }
+        }
+        return -1;
+    }
+
+    /** Ticks until the oldest hold ends, or -1 if nothing is held. */
+    static int oldestRemaining() {
+        Held first = HELD.peekFirst();
+        return first == null ? -1 : Math.max(0, first.dueTick - TickMonitor.tick);
+    }
+
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
