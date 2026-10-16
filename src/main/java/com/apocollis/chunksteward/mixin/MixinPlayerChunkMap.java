@@ -1,7 +1,7 @@
-package com.apocollis.lazychunks.mixin;
+package com.apocollis.chunksteward.mixin;
 
-import com.apocollis.lazychunks.server.ChunkThrottle;
-import com.apocollis.lazychunks.server.DirectionalOrder;
+import com.apocollis.chunksteward.server.ChunkThrottle;
+import com.apocollis.chunksteward.server.DirectionalOrder;
 import net.minecraft.server.management.PlayerChunkMap;
 import net.minecraft.server.management.PlayerChunkMapEntry;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,14 +26,14 @@ public abstract class MixinPlayerChunkMap {
 
     @Redirect(method = "tick()V", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/management/PlayerChunkMapEntry;providePlayerChunk(Z)Z"))
-    private boolean lazychunks$provide(PlayerChunkMapEntry entry, boolean canGenerate) {
+    private boolean chunksteward$provide(PlayerChunkMapEntry entry, boolean canGenerate) {
         return ChunkThrottle.provide((PlayerChunkMap) (Object) this, entry, canGenerate);
     }
 
     @Redirect(method = "tick()V", at = @At(value = "INVOKE",
             target = "Ljava/util/Collections;sort(Ljava/util/List;Ljava/util/Comparator;)V", ordinal = 0,
             remap = false))
-    private void lazychunks$sortMissing(List<PlayerChunkMapEntry> list,
+    private void chunksteward$sortMissing(List<PlayerChunkMapEntry> list,
                                         Comparator<? super PlayerChunkMapEntry> vanilla) {
         DirectionalOrder.sort(list, vanilla);
     }

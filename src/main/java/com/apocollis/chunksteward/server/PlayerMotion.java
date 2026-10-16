@@ -1,7 +1,7 @@
-package com.apocollis.lazychunks.server;
+package com.apocollis.chunksteward.server;
 
-import com.apocollis.lazychunks.config.LazyChunksConfig;
-import com.apocollis.lazychunks.mixin.AccessorPlayerChunkMap;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
+import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMap;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
@@ -81,7 +81,7 @@ public final class PlayerMotion {
         if (server == null) {
             return;
         }
-        LazyChunksConfig.Ordering cfg = LazyChunksConfig.ordering;
+        ChunkStewardConfig.Ordering cfg = ChunkStewardConfig.ordering;
         boolean resort = cfg.enabled && cfg.directionPenalty > 0.0 && cfg.resortAngleDegrees > 0.0;
         double resortCos = Math.cos(Math.toRadians(cfg.resortAngleDegrees));
         for (EntityPlayerMP player : server.getPlayerList().getPlayers()) {
@@ -91,12 +91,12 @@ public final class PlayerMotion {
                 state.sortDirX = state.dirX;
                 state.sortDirZ = state.dirZ;
                 ((AccessorPlayerChunkMap) player.getServerWorld().getPlayerChunkMap())
-                        .lazychunks$setSortMissingChunks(true);
+                        .chunksteward$setSortMissingChunks(true);
             }
         }
     }
 
-    private static void update(EntityPlayerMP player, State state, LazyChunksConfig.Ordering cfg) {
+    private static void update(EntityPlayerMP player, State state, ChunkStewardConfig.Ordering cfg) {
         double dx = player.posX - state.lastX;
         double dz = player.posZ - state.lastZ;
         state.lastX = player.posX;

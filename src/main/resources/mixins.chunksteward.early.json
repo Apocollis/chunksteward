@@ -2,8 +2,8 @@
   "required": true,
   "injectors": {"defaultRequire": 1},
   "minVersion": "0.8",
-  "refmap": "mixins.lazychunks.refmap.json",
-  "package": "com.apocollis.lazychunks.mixin",
+  "refmap": "mixins.chunksteward.refmap.json",
+  "package": "com.apocollis.chunksteward.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "AccessorPlayerChunkMap",
@@ -12,6 +12,7 @@
     "MixinGameRegistry",
     "MixinMinecraftServer",
     "MixinPlayerChunkMap",
-    "MixinPlayerChunkMapEntry"
+    "MixinPlayerChunkMapEntry",
+    "MixinWorldServer"
   ]
 }

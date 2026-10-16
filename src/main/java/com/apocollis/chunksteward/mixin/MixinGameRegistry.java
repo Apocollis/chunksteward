@@ -1,6 +1,6 @@
-package com.apocollis.lazychunks.mixin;
+package com.apocollis.chunksteward.mixin;
 
-import com.apocollis.lazychunks.server.GenMetrics;
+import com.apocollis.chunksteward.server.GenMetrics;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.gen.IChunkGenerator;
@@ -18,7 +18,7 @@ public abstract class MixinGameRegistry {
 
     @Redirect(method = "generateWorld", at = @At(value = "INVOKE",
             target = "Lnet/minecraftforge/fml/common/IWorldGenerator;generate(Ljava/util/Random;IILnet/minecraft/world/World;Lnet/minecraft/world/gen/IChunkGenerator;Lnet/minecraft/world/chunk/IChunkProvider;)V"))
-    private static void lazychunks$generate(IWorldGenerator generator, Random random, int chunkX, int chunkZ,
+    private static void chunksteward$generate(IWorldGenerator generator, Random random, int chunkX, int chunkZ,
                                             World world, IChunkGenerator chunkGenerator,
                                             IChunkProvider chunkProvider) {
         if (!GenMetrics.active()) {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3
+- Renamed from Lazy Chunks 1.12 to **Chunk Steward**: modid `lazychunks` → `chunksteward`, package `com.apocollis.chunksteward`, config `config/chunksteward.cfg` (same keys; copy `lazychunks.cfg` over), jar `ChunkSteward-<version>.jar`, mixin config `mixins.chunksteward.early.json`. New logo (credits in `NOTICE.md` and `mcmod.info`). The deploy script now also deletes `LazyChunks-*.jar`, since the old and new jars must never both load. Existing worlds log a one-time "saved with mod lazychunks which appears to be missing" notice, which is harmless.
+- Populate budgeting: a populate that would push the current tick past `populate.tickBudgetMs` (30) is queued and run later, nearest and most-forward first; chunks near players, and players in login warmup, populate at once. Fixes the multi-second stalls of 0.2 test logs, which were populate bursts of chunks loaded from disk (including terrain-only preload chunks), not terrain generation. See `docs/populate.md`.
+- Cascades in terrain-only mode, nothing cancelled: a chunk generated while another is populating is populated later through the queue, so ore, trees and village pieces still see real terrain and place normally. Cascade chunks no player owns are held and then released (vanilla never unloads them). Cascades are counted by the causing `IWorldGenerator` class in the status log.
+- Random-tick guard: during `WorldServer.updateBlocks` an unloaded chunk read returns an empty chunk instead of generating (lava and fire spread, grass spread). `randomTicks.guardEnabled`. See `docs/random-ticks.md`.
+- Preload rewritten: always-on, two tiers measured from the live view distance and excluding the area vanilla loads. Idle (still 1 s): full out to view + 2, terrain only out to view + 12. Moving (slow only): terrain-only forward cone out to view + 3. Holds off while chunks are waiting, recent generation is busy (`busyChunks`), populates are backed up, or ticks are over the tier limit; per-player per-minute limit; known-generated cache avoids repeated region-file checks.
+- Config: new `populate`, `randomTicks` sections and new `preload` keys. Removed `preload.radius`, `terrainOnlyRadius`, `terrainOnlyMaxChunks`, `stationaryTicks` (the old keys in an existing cfg are dropped on the next write); `preload.maxTickMs` is now the idle tier's limit.
+- Ticket exemption: a chunk held by a Forge chunk ticket owned by a mod in `populate.ticketExemptMods` (default `roguelike`) populates at once and is taken out of the queue, so Roguelike's dungeon build job is never racing a later queue populate. Counted as `ticket-exempt` in the status log. Cascades are never exempt.
+- Held chunks (preload and cascades) share `ChunkHolds` and are never released while a player watches them or a Forge ticket owns them.
+- Status log: populate queue, cascades by generator, held chunks, preload tiers and yields, random-tick guard counts and sources.
+
 ## 0.2
 - Direction-weighted order for missing chunks: distance penalised by angle from the player's view direction (still) or travel direction (fast); cached scores, stable sort; `directionPenalty = 0` is vanilla order. Re-sort when a player turns past `resortAngleDegrees`.
 - Speed-scaled emergency radius above `emergencyMinSpeed`, capped at `emergencyMaxRadius`.

@@ -1,4 +1,4 @@
-package com.apocollis.lazychunks.mixin;
+package com.apocollis.chunksteward.mixin;
 
 import net.minecraft.server.management.PlayerChunkMap;
 import net.minecraft.server.management.PlayerChunkMapEntry;
@@ -15,8 +15,12 @@ import java.util.List;
 public interface AccessorPlayerChunkMap {
 
     @Accessor("sortMissingChunks")
-    void lazychunks$setSortMissingChunks(boolean sort);
+    void chunksteward$setSortMissingChunks(boolean sort);
 
     @Accessor("entriesWithoutChunks")
-    List<PlayerChunkMapEntry> lazychunks$getEntriesWithoutChunks();
+    List<PlayerChunkMapEntry> chunksteward$getEntriesWithoutChunks();
+
+    /** The view distance in chunks ({@code field_72698_e}). */
+    @Accessor("playerViewRadius")
+    int chunksteward$getViewRadius();
 }

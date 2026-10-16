@@ -1,6 +1,6 @@
-package com.apocollis.lazychunks.server;
+package com.apocollis.chunksteward.server;
 
-import com.apocollis.lazychunks.config.LazyChunksConfig;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import net.minecraft.server.management.PlayerChunkMapEntry;
 
 import java.util.ArrayList;
@@ -31,6 +31,8 @@ public final class GenMetrics {
     /** key -> {nanos, calls}. Keys are the stage constants or IWorldGenerator classes. */
     private static final Map<Object, long[]> ACCUM = new HashMap<>();
     private static final Map<PlayerChunkMapEntry, Long> CREATED = new WeakHashMap<>();
+    /** Cascades (a chunk generated inside a populate) by the innermost running world generator: key -> {count}. */
+    private static final Map<Object, long[]> CASCADES = new HashMap<>();
 
     private static long waitSamples;
     private static long waitNanosTotal;
@@ -40,7 +42,7 @@ public final class GenMetrics {
     }
 
     public static boolean active() {
-        return LazyChunksConfig.logging.statusIntervalSeconds > 0 && Thread.currentThread() == TickMonitor.serverThread;
+        return ChunkStewardConfig.logging.statusIntervalSeconds > 0 && Thread.currentThread() == TickMonitor.serverThread;
     }
 
     public static void enter(Object key) {
@@ -88,6 +90,26 @@ public final class GenMetrics {
         }
         acc[0] += nanos;
         acc[1] += calls;
+    }
+
+    /** A chunk was generated while another was populating; charge it to the world generator that caused it. */
+    public static void noteCascade() {
+        if (!active()) {
+            return;
+        }
+        Object key = POPULATE;
+        for (int i = depth - 1; i >= 0; i--) {
+            if (STACK[i] instanceof Class) {
+                key = STACK[i];
+                break;
+            }
+        }
+        long[] count = CASCADES.get(key);
+        if (count == null) {
+            count = new long[1];
+            CASCADES.put(key, count);
+        }
+        count[0]++;
     }
 
     static void onTickStart() {
@@ -139,7 +161,7 @@ public final class GenMetrics {
                 .append("; wait avg ").append(waitSamples == 0 ? "-" : ms(waitNanosTotal / waitSamples))
                 .append(" ms max ").append(waitSamples == 0 ? "-" : ms(waitNanosMax))
                 .append(" ms over ").append(waitSamples).append(" chunks");
-        int top = Math.min(LazyChunksConfig.logging.topGenerators, gens.size());
+        int top = Math.min(ChunkStewardConfig.logging.topGenerators, gens.size());
         if (top > 0) {
             sb.append("; top generators:");
             for (int i = 0; i < top; i++) {
@@ -151,6 +173,17 @@ public final class GenMetrics {
                 }
             }
         }
+        if (!CASCADES.isEmpty()) {
+            List<Map.Entry<Object, long[]>> casc = new ArrayList<>(CASCADES.entrySet());
+            casc.sort((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]));
+            sb.append("; cascades by generator:");
+            for (int i = 0; i < Math.min(3, casc.size()); i++) {
+                Object k = casc.get(i).getKey();
+                sb.append(' ').append(k instanceof Class ? ((Class<?>) k).getName() : "(other populate)")
+                        .append(' ').append(casc.get(i).getValue()[0]);
+            }
+        }
+        CASCADES.clear();
         ACCUM.clear();
         waitSamples = waitNanosTotal = waitNanosMax = 0L;
         if (!active()) {

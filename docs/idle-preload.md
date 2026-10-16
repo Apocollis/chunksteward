@@ -1,30 +1,48 @@
-# Idle preload
+# Preload (idle and moving tiers)
 
-`IdlePreload` (server tick END). A player is stationary after `stationaryTicks` within 0.25 block. When the server is idle (tick EMA and the current tick both under `maxTickMs`, no save pause) it generates at most one chunk every `intervalTicks` for one stationary player (round robin).
+`IdlePreload` (server tick END) generates chunks beyond the view distance around players while the server has spare time. At most one chunk every `intervalTicks` (2), round-robin over players, at most `maxPerMinute` (90) per player per minute.
 
-## Queue per stationary spell
+All radii are measured from the live view distance (`PlayerChunkMap.playerViewRadius`, read through `AccessorPlayerChunkMap`), and the square the vanilla loads for the player (`|dx| <= view and |dz| <= view`) is excluded: preload never repeats what vanilla provides. At view distance 8, `idleExtraFull = 2` is radius 10 and `idleExtraTerrain = 12` is radius 20.
 
-1. Full chunks within `radius` (10), by class (under player, front cone within 60 degrees, sides, behind), then distance.
-2. Terrain-only ring from `radius` out to `terrainOnlyRadius` (20; 0 = off), same classes (front, sides, behind), then distance. At most `terrainOnlyMaxChunks` (600) terrain-only chunks per spell; a full ring is about 940 chunks (circle).
+## Tiers
 
-Chunks already loaded or already generated on disk (`isChunkGeneratedAt`) are skipped (at most 16 checks per tick). Loaded checks use `StageGate.peek`, not `getLoadedChunk`, which would cancel a pending unload of that chunk (a leak in 0.1).
+| | Moving | Idle |
+| --- | --- | --- |
+| Condition | not idle, `speed <= movingMaxSpeed` (0.30 blocks/tick: walking and sprinting, not flying or elytra), `movingEnabled` | no movement over 0.25 block for `idleStillTicks` (20 = 1 s) |
+| Full generation | none | out to view + `idleExtraFull` (2) |
+| Terrain only | forward cone (`movingForwardAngleDegrees` half-angle, 60) out to view + `movingExtraTerrain` (3) | out to view + `idleExtraTerrain` (12; 0 = off) |
+| Tick limit | tick EMA and current tick under `movingMaxTickMs` (15) | under `maxTickMs` (20) |
+| Order | nearest first inside the cone | front cone, sides, behind (full before terrain-only), nearest first |
+
+Direction comes from `PlayerMotion`: view direction when slow, travel direction when fast.
+
+## When preload holds off (every tier)
+
+- chunks are waiting for any player (`TickMonitor.waitingNow()`, entries without a chunk): preload yields to demand;
+- `busyChunks` (6) chunks were generated in the last `busyWindowTicks` (100) by anything but preload (`TickMonitor.recentExternalGen`, counted at the terrain stage): the server is busy generating chunks players need;
+- more than `maxPopulateBacklog` (4) populates are queued ([populate.md](populate.md));
+- the tick is over the tier's limit, a save is pending, or the dimension is excluded.
+
+The status log counts each yield (`yielded to demand/busy/populate backlog`).
+
+## Queue
+
+Built when the tier starts, when it changes, when the view distance changes, and for the moving tier when the player enters a new chunk or turns past about 30 degrees (at most every 10 ticks). Idle players keep one queue. Moving players have a queue only while they are slow.
+
+Chunks already loaded or known to exist are skipped (at most 16 checks per tick). `GeneratedCache` keeps positive answers (a bounded set per dimension, filled by every generation and by disk checks), so most checks do not touch the region file; `isChunkGeneratedAt` ends in a `File.exists` per call. Loaded checks use `StageGate.peek`, not `getLoadedChunk`, which would cancel a pending unload.
 
 ## Full chunks
 
-Generated with `ChunkProviderServer.provideChunk` on the server thread. A chunk is populated only once its neighbours exist, so each one is held loaded for `holdTicks` and then released with `queueUnload` (which saves it). `maxHeldChunks` caps the hold list. Chunks a player already watches are never queued for unload. While preload generates a full chunk, populate is still kept away from terrain-only chunks (see below).
+Generated with `ChunkProviderServer.provideChunk` on the server thread. A chunk is populated only once its neighbours exist, so each is held loaded for `holdTicks` (200) through `ChunkHolds` and then released with `queueUnload` (which saves it). `maxHeldChunks` caps the hold list, shared with cascade chunks. Chunks a player watches or a Forge ticket owns are never released.
 
 ## Terrain-only chunks
 
-Generated inside `StageGate.beginTerrainOnly`/`endTerrainOnly`; the `Chunk.populate(IChunkGenerator)` mixin cancels populate for them, so they are saved with `TerrainPopulated = false` (and no light). Vanilla populates them later in the normal way, when they are loaded next to their neighbours. Details and the "player arrives while it is still loaded" case: [stage-gate.md](stage-gate.md).
-
-They are released (`queueUnload`) immediately instead of held. Holding them would let the next ring chunk's neighbour check populate them, which is the work the ring exists to skip.
+Generated inside `StageGate.beginTerrainOnly`/`endTerrainOnly`; the populate gate defers their populate, so they are saved with `TerrainPopulated = false`. They are released at once. Vanilla populates them later when they are loaded next to their neighbours, or [populate.md](populate.md) does when a player claims them while loaded.
 
 ## Release re-check
 
-Vanilla's neighbour populate check (and anything else) calls `getLoadedChunk`, which clears `unloadQueued` and so cancels the release. Every released chunk is re-checked every 20 ticks, up to 10 times: if it is still loaded, not watched by a player and no longer queued, `queueUnload` is issued again.
-
-Moving, changing dimension, or the server getting busy stops preload; the queue (and the terrain-only count) is rebuilt next time the player stands still.
+Vanilla's neighbour populate check calls `getLoadedChunk`, which clears `unloadQueued`. `ChunkHolds` re-checks every released chunk every 20 ticks, up to 10 times, and issues `queueUnload` again if it is still loaded and unowned.
 
 ## Disk
 
-The ring adds up to `terrainOnlyMaxChunks` chunks per fresh spot. Test on a copy of a world.
+Terrain-only chunks stay on disk. Measured on a test world: about 9.4 KB per chunk (357 MB for 38,772 chunks). The per-minute limit and the busy and demand holds keep the growth bounded. Test on a copy of a world.

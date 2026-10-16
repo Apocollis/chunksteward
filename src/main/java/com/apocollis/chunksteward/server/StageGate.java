@@ -1,6 +1,7 @@
-package com.apocollis.lazychunks.server;
+package com.apocollis.chunksteward.server;
 
-import com.apocollis.lazychunks.config.LazyChunksConfig;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
+import com.google.common.collect.ImmutableSetMultimap;
 import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
 import it.unimi.dsi.fastutil.longs.LongIterator;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -11,6 +12,7 @@ import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.ChunkProviderServer;
 import net.minecraftforge.common.DimensionManager;
+import net.minecraftforge.common.ForgeChunkManager;
 import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -25,11 +27,12 @@ import java.util.Map;
  * {@link #runNow}; a {@code false} answer means the caller skips the stage and this class owns the follow-up.
  *
  * <ul>
- * <li>{@link Stage#POPULATE}: deferred only for terrain-only chunks made by {@link IdlePreload}, and only while
- * preload itself is generating. Follow-up: none needed while the chunk is unloaded, since vanilla populates it when it
- * is loaded again next to its neighbours. If a player's chunk map claims it while it is still loaded,
- * {@link #onServerTick} runs vanilla's {@code chunk.populate(provider, generator)} on it, the same call a load
- * would have made.</li>
+ * <li>{@link Stage#POPULATE}: deferred for (1) terrain-only chunks made by {@link IdlePreload} while preload itself is
+ * generating, (2) any chunk generated while another chunk is populating (a cascade), and (3) any chunk whose populate
+ * would push the current tick past {@code populate.tickBudgetMs}, except chunks near players. Follow-up for (2) and
+ * (3): {@link PopulateQueue}, drained each tick within a budget. For (1): nothing while the chunk is unloaded, since
+ * vanilla populates it when it is loaded again next to its neighbours; if a player's chunk map claims it while it is
+ * still loaded, it is queued like the others.</li>
  * <li>{@link Stage#LIGHT}: {@code checkLight()} retries on terrain-populated, unlit chunks (the per-tick retry
  * {@code Chunk.onTick} makes, through Somnia/Tweaks in this pack), deferred (when enabled) for chunks away from
  * players and outside their travel direction during heavy generation. Follow-up: a per-dimension queue drained
@@ -37,8 +40,6 @@ import java.util.Map;
  * saved with {@code LightPopulated = false} and vanilla relights it after the next load.</li>
  * </ul>
  *
- * <p>For 0.3: a populate queue and neighbour tracking slot in as another {@link Stage} case with its own
- * {@code DimQueue}-style follow-up; callers do not change.
  */
 @Mod.EventBusSubscriber
 public final class StageGate {
@@ -66,8 +67,17 @@ public final class StageGate {
     private static boolean draining;
     private static final double[] DIR = new double[2];
 
+    // Populate depth: the chunks whose populate has started and not yet returned (frames guard against a cancelled head).
+    private static final Chunk[] FRAMES = new Chunk[32];
+    private static int populateDepth;
+    private static int populatesThisTick;
+    private static int lastPopulateTick = Integer.MIN_VALUE / 2;
+
     private static long statPopulateDeferred;
+    private static long statPopulateCascadeDeferred;
+    private static long statPopulateTicketExempt;
     private static long statPopulateResumed;
+    private static long statCascades;
     private static long statLightDeferred;
     private static long statLightDrained;
 
@@ -109,19 +119,138 @@ public final class StageGate {
     }
 
     private static boolean populateNow(Chunk chunk) {
-        if (!preloading) {
-            return true;
-        }
         World world = chunk.getWorld();
-        if (world.provider.getDimension() != preloadDim) {
+        int dim = world.provider.getDimension();
+        long key = ChunkPos.asLong(chunk.x, chunk.z);
+        if (preloading && dim == preloadDim) {
+            LongOpenHashSet set = TERRAIN_ONLY.get(preloadDim);
+            if (set != null && set.contains(key)) {
+                statPopulateDeferred++;
+                return false;
+            }
+        }
+        ChunkStewardConfig.Populate cfg = ChunkStewardConfig.populate;
+        if (!cfg.enabled || world.isRemote || Thread.currentThread() != TickMonitor.serverThread
+                || !Dimensions.applies(dim)) {
             return true;
         }
-        LongOpenHashSet set = TERRAIN_ONLY.get(preloadDim);
-        if (set == null || !set.contains(ChunkPos.asLong(chunk.x, chunk.z))) {
+        if (populateDepth == 0 && PopulateQueue.isDraining()) {
             return true;
         }
-        statPopulateDeferred++;
+        if (populateDepth == 0 && ticketExempt(world, chunk.x, chunk.z)) {
+            PopulateQueue.remove(dim, key);
+            statPopulateTicketExempt++;
+            return true;
+        }
+        if (PopulateQueue.contains(dim, key)) {
+            return false;
+        }
+        if (PopulateQueue.nearPlayer(world, chunk.x, chunk.z, cfg.protectRadius)
+                || Warmup.anyWarmNear(world, chunk.x, chunk.z)) {
+            return true;
+        }
+        boolean cascade = populateDepth > 0 && cfg.cascadeDeferral;
+        if (!cascade && withinPopulateBudget(cfg)) {
+            return true;
+        }
+        if (!PopulateQueue.enqueue(dim, key)) {
+            return true;
+        }
+        if (cascade) {
+            statPopulateCascadeDeferred++;
+        } else {
+            statPopulateDeferred++;
+        }
         return false;
+    }
+
+    /**
+     * The chunk is held by a Forge ticket owned by a mod on {@code populate.ticketExemptMods}. Such a mod forces the
+     * chunk on its ticket before it calls populate itself, so deferring that populate would run it after the mod built
+     * on the chunk.
+     */
+    private static boolean ticketExempt(World world, int x, int z) {
+        String[] mods = ChunkStewardConfig.populate.ticketExemptMods;
+        if (mods == null || mods.length == 0) {
+            return false;
+        }
+        ImmutableSetMultimap<ChunkPos, ForgeChunkManager.Ticket> forced =
+                ForgeChunkManager.getPersistentChunksFor(world);
+        if (forced.isEmpty()) {
+            return false;
+        }
+        for (ForgeChunkManager.Ticket ticket : forced.get(new ChunkPos(x, z))) {
+            String owner = ticket.getModId();
+            for (String mod : mods) {
+                if (mod != null && mod.trim().equals(owner)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The current tick has room for a populate, or the starvation guard says one is overdue. */
+    private static boolean withinPopulateBudget(ChunkStewardConfig.Populate cfg) {
+        if (TickMonitor.currentTickMs() < cfg.tickBudgetMs) {
+            return true;
+        }
+        return populatesThisTick == 0 && TickMonitor.tick - lastPopulateTick >= cfg.maxStarveTicks;
+    }
+
+    /** A populate passed the gate and is starting. */
+    public static void populateEnter(Chunk chunk) {
+        if (Thread.currentThread() != TickMonitor.serverThread) {
+            return;
+        }
+        if (populateDepth < FRAMES.length) {
+            FRAMES[populateDepth] = chunk;
+        }
+        populateDepth++;
+        if (populateDepth == 1) {
+            populatesThisTick++;
+            lastPopulateTick = TickMonitor.tick;
+        }
+    }
+
+    /** A populate returned. A head that was cancelled never entered, so a frame mismatch is ignored. */
+    public static void populateExit(Chunk chunk) {
+        if (populateDepth == 0 || Thread.currentThread() != TickMonitor.serverThread) {
+            return;
+        }
+        int top = populateDepth - 1;
+        if (top < FRAMES.length) {
+            if (FRAMES[top] != chunk) {
+                return;
+            }
+            FRAMES[top] = null;
+        }
+        populateDepth--;
+    }
+
+    /** A chunk's terrain is being generated. Inside a populate that is a cascade; the chunk is released later. */
+    public static void onGenerate(int dim, int x, int z) {
+        GeneratedCache.add(dim, x, z);
+        if (Thread.currentThread() != TickMonitor.serverThread) {
+            return;
+        }
+        if (!preloading) {
+            TickMonitor.countExternalGen();
+        }
+        if (populateDepth > 0) {
+            statCascades++;
+            GenMetrics.noteCascade();
+            ChunkStewardConfig.Populate cfg = ChunkStewardConfig.populate;
+            if (cfg.enabled && cfg.cascadeDeferral && Dimensions.applies(dim)) {
+                ChunkHolds.hold(dim, x, z, cfg.cascadeHoldTicks);
+            }
+        }
+    }
+
+    static void onTickStart() {
+        populateDepth = 0;
+        java.util.Arrays.fill(FRAMES, null);
+        populatesThisTick = 0;
     }
 
     /** Drops tracked terrain-only chunks once unloaded; populates the ones a player's chunk map picked up. */
@@ -146,7 +275,7 @@ public final class StageGate {
                 } else if (world.getPlayerChunkMap().contains(x, z)) {
                     it.remove();
                     statPopulateResumed++;
-                    chunk.populate(provider, provider.chunkGenerator);
+                    PopulateQueue.enqueue(e.getKey(), key);
                 }
             }
             if (e.getValue().isEmpty()) {
@@ -166,7 +295,7 @@ public final class StageGate {
     // ---- light ----------------------------------------------------------------------------------------------------
 
     private static boolean lightNow(Chunk chunk) {
-        LazyChunksConfig.Light cfg = LazyChunksConfig.light;
+        ChunkStewardConfig.Light cfg = ChunkStewardConfig.light;
         if (!cfg.deferEnabled || draining || Thread.currentThread() != TickMonitor.serverThread) {
             return true;
         }
@@ -218,7 +347,7 @@ public final class StageGate {
         if (lightQueued == 0) {
             return;
         }
-        LazyChunksConfig.Light cfg = LazyChunksConfig.light;
+        ChunkStewardConfig.Light cfg = ChunkStewardConfig.light;
         long deadline = System.nanoTime() + (long) (cfg.drainBudgetMs * 1.0e6);
         int budget = cfg.drainPerTick;
         Iterator<Map.Entry<Integer, DimQueue>> dims = LIGHT_QUEUES.entrySet().iterator();
@@ -263,6 +392,7 @@ public final class StageGate {
         if (!TERRAIN_ONLY.isEmpty()) {
             reconcileTerrainOnly();
         }
+        PopulateQueue.drain();
         drainLight();
     }
 
@@ -273,6 +403,7 @@ public final class StageGate {
         }
         int dim = event.getWorld().provider.getDimension();
         TERRAIN_ONLY.remove(dim);
+        PopulateQueue.clear(dim);
         DimQueue queue = LIGHT_QUEUES.remove(dim);
         if (queue != null) {
             lightQueued -= queue.order.size();
@@ -283,10 +414,19 @@ public final class StageGate {
         return lightQueued;
     }
 
+    static int populateQueued() {
+        return PopulateQueue.size();
+    }
+
     static String reportAndReset() {
-        String s = "populate deferred " + statPopulateDeferred + ", resumed " + statPopulateResumed
-                + "; light deferred " + statLightDeferred + ", drained " + statLightDrained + ", queued " + lightQueued;
-        statPopulateDeferred = statPopulateResumed = statLightDeferred = statLightDrained = 0L;
+        String s = "populate deferred " + statPopulateDeferred + " (cascade " + statPopulateCascadeDeferred
+                + "), resumed " + statPopulateResumed + ", ticket-exempt " + statPopulateTicketExempt
+                + ", cascades " + statCascades + ", "
+                + PopulateQueue.reportAndReset() + "; light deferred " + statLightDeferred + ", drained "
+                + statLightDrained + ", queued " + lightQueued + "; held " + ChunkHolds.heldCount();
+        statPopulateDeferred = statPopulateCascadeDeferred = statPopulateResumed = statCascades = 0L;
+        statPopulateTicketExempt = 0L;
+        statLightDeferred = statLightDrained = 0L;
         return s;
     }
 }

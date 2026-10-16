@@ -1,6 +1,6 @@
-package com.apocollis.lazychunks.mixin;
+package com.apocollis.chunksteward.mixin;
 
-import com.apocollis.lazychunks.server.TickMonitor;
+import com.apocollis.chunksteward.server.TickMonitor;
 import net.minecraft.server.MinecraftServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -15,17 +15,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MixinMinecraftServer {
 
     @Inject(method = "tick()V", at = @At("HEAD"))
-    private void lazychunks$tickStart(CallbackInfo ci) {
+    private void chunksteward$tickStart(CallbackInfo ci) {
         TickMonitor.onTickStart(((MinecraftServer) (Object) this).getTickCounter());
     }
 
     @Inject(method = "tick()V", at = @At("RETURN"))
-    private void lazychunks$tickEnd(CallbackInfo ci) {
+    private void chunksteward$tickEnd(CallbackInfo ci) {
         TickMonitor.onTickEnd();
     }
 
     @Inject(method = "saveAllWorlds(Z)V", at = @At("HEAD"))
-    private void lazychunks$saveStart(boolean isSilent, CallbackInfo ci) {
+    private void chunksteward$saveStart(boolean isSilent, CallbackInfo ci) {
         TickMonitor.onSave();
     }
 }

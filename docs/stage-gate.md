@@ -4,7 +4,7 @@
 
 | Stage | Hook | Deferred when | Follow-up |
 | --- | --- | --- | --- |
-| `POPULATE` | `Chunk.populate(IChunkGenerator)` (`func_186034_a`) HEAD, cancel | preload is generating, and the chunk is a terrain-only preload chunk | none while unloaded; vanilla populates on a later load. Still loaded and claimed by a player → `chunk.populate(provider, generator)` |
+| `POPULATE` | `Chunk.populate(IChunkGenerator)` (`func_186034_a`) HEAD, cancel | a terrain-only preload chunk while preload generates; a cascade chunk; any populate past the tick budget unless near a player ([populate.md](populate.md)) | `PopulateQueue`, drained each tick within a budget. Terrain-only chunks: none while unloaded (vanilla populates on a later load); claimed by a player while loaded → queued |
 | `LIGHT` | `Chunk.checkLight()` (`func_150809_p`) HEAD, cancel, when the chunk is terrain-populated and not light-populated | `light.deferEnabled`, heavy generation, chunk away from players and outside their direction | per-dimension queue, drained within a per-tick budget |
 
 ## Populate (terrain-only ring)
@@ -13,9 +13,9 @@
 
 Why suppression covers every tracked terrain-only chunk and not just the one being generated: vanilla populates chunk A when the last of A, A+x, A+z, A+x+z loads. Generating the next ring chunk would otherwise populate its neighbour right away.
 
-Why it is limited to preload's own `provideChunk` calls (`preloading`): when a player or anything else loads chunks, vanilla's populate must run as usual. A terrain-only chunk that is still loaded when a player's chunk map claims it would otherwise never populate (no load event left to trigger it) and never be sent (`isPopulated` is false), leaving a hole. `StageGate` keeps the tracked set per dimension and checks it every tick END. It drops entries that are unloaded or populated. For an entry that `PlayerChunkMap.contains`, it runs `chunk.populate(provider, provider.chunkGenerator)`, the same call a load would have made.
+Why it is limited to preload's own `provideChunk` calls (`preloading`): when a player or anything else loads chunks, vanilla's populate must run as usual. A terrain-only chunk that is still loaded when a player's chunk map claims it would otherwise never populate (no load event left to trigger it) and never be sent (`isPopulated` is false), leaving a hole. `StageGate` keeps the tracked set per dimension and checks it every tick END. It drops entries that are unloaded or populated. For an entry that `PlayerChunkMap.contains`, it is queued in `PopulateQueue`, whose drain runs `chunk.populate(provider, provider.chunkGenerator)`, the same call a load would have made.
 
-Populate deferral of normal chunks (a populate queue) is 0.3 scope.
+Populate deferral of normal chunks (budget and cascades) is in [populate.md](populate.md); it uses the same gate and the same queue.
 
 ## Light deferral (default off)
 
@@ -36,6 +36,6 @@ Effect: the chunk stays `isLightPopulated = false`, so `isPopulated` is false an
 
 Unload/save while queued: only `(dimension, x, z)` is queued, never the `Chunk`. An unloaded chunk is saved with `LightPopulated = false` and dropped from the queue when drained; vanilla relights it after the next load. World unload clears that dimension's queue. Nothing leaks: the queue is bounded by `maxQueued` and each entry leaves on its drain.
 
-## Extending in 0.3
+## Extending
 
-Add a stage (or a policy inside `POPULATE`) with its own queue. The pattern is `DimQueue`: a position set and a FIFO per dimension, drained by budget, with only positions stored. Neighbour tracking belongs in StageGate next to the terrain-only set. Mixins keep calling `runNow` unchanged.
+Add a stage (or a policy inside `POPULATE`) with its own queue. The pattern is `DimQueue` and `PopulateQueue`: a position set per dimension, drained by budget, with only positions stored. Neighbour tracking belongs in StageGate next to the terrain-only set. Mixins keep calling `runNow` unchanged.

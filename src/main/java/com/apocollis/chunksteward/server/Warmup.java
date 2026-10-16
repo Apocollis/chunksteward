@@ -1,9 +1,12 @@
-package com.apocollis.lazychunks.server;
+package com.apocollis.chunksteward.server;
 
-import com.apocollis.lazychunks.config.LazyChunksConfig;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import com.google.common.base.Predicate;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.management.PlayerChunkMapEntry;
+import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
@@ -24,7 +27,7 @@ public final class Warmup {
                 return false;
             }
             Integer joined = JOINED.get(player.getUniqueID());
-            return joined != null && TickMonitor.tick - joined < LazyChunksConfig.throttle.warmupTicks;
+            return joined != null && TickMonitor.tick - joined < ChunkStewardConfig.throttle.warmupTicks;
         }
     };
 
@@ -33,6 +36,22 @@ public final class Warmup {
 
     static boolean isWarm(PlayerChunkMapEntry entry) {
         return !JOINED.isEmpty() && entry.hasPlayerMatching(WARM);
+    }
+
+    /** A player who joined recently is within the view distance (plus one) of the chunk. */
+    static boolean anyWarmNear(World world, int cx, int cz) {
+        if (JOINED.isEmpty() || !(world instanceof WorldServer)) {
+            return false;
+        }
+        int radius = TickMonitor.viewRadius((WorldServer) world) + 1;
+        for (EntityPlayer player : world.playerEntities) {
+            if (player instanceof EntityPlayerMP && WARM.apply((EntityPlayerMP) player)
+                    && Math.abs(cx - (((int) Math.floor(player.posX)) >> 4)) <= radius
+                    && Math.abs(cz - (((int) Math.floor(player.posZ)) >> 4)) <= radius) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @SubscribeEvent

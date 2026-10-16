@@ -1,6 +1,6 @@
-package com.apocollis.lazychunks.server;
+package com.apocollis.chunksteward.server;
 
-import com.apocollis.lazychunks.config.LazyChunksConfig;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import com.google.common.base.Predicate;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.management.PlayerChunkMapEntry;
@@ -62,7 +62,7 @@ public final class DirectionalOrder {
     }
 
     public static void sort(List<PlayerChunkMapEntry> list, Comparator<? super PlayerChunkMapEntry> vanilla) {
-        LazyChunksConfig.Ordering cfg = LazyChunksConfig.ordering;
+        ChunkStewardConfig.Ordering cfg = ChunkStewardConfig.ordering;
         if (!cfg.enabled || cfg.directionPenalty <= 0.0 || list.size() < 2) {
             Collections.sort(list, vanilla);
             return;

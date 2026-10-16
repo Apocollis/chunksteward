@@ -3,10 +3,10 @@ plugins {
     id 'xyz.wagyourtail.unimined' version '1.4.17-kappa'
 }
 
-group = 'com.apocollis.lazychunks'
-version = '0.2'
+group = 'com.apocollis.chunksteward'
+version = '0.3'
 base {
-    archivesName.set('LazyChunks')
+    archivesName.set('ChunkSteward')
 }
 
 java {
@@ -44,7 +44,7 @@ jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {
         attributes([
-            "Specification-Title": "lazychunks",
+            "Specification-Title": "chunksteward",
             "Specification-Vendor": "apocollis",
             "Specification-Version": "1",
             "Implementation-Title": project.name,
@@ -54,7 +54,7 @@ jar {
             "ModType": "CRL",
             "FMLCorePluginContainsFMLMod": "true",
             "ForceLoadAsMod": "true",
-            "MixinConfigs": "mixins.lazychunks.early.json"
+            "MixinConfigs": "mixins.chunksteward.early.json"
         ])
     }
 }
@@ -69,21 +69,21 @@ processResources {
 tasks.register('verifyReleaseJar') {
     dependsOn 'remapJar'
     doLast {
-        def jarFile = layout.buildDirectory.file("libs/LazyChunks-${version}.jar").get().asFile
+        def jarFile = layout.buildDirectory.file("libs/ChunkSteward-${version}.jar").get().asFile
         if (!jarFile.exists()) {
             throw new GradleException("Missing remapped jar: ${jarFile}")
         }
-        def modSource = file('src/main/java/com/apocollis/lazychunks/LazyChunks.java').text
+        def modSource = file('src/main/java/com/apocollis/chunksteward/ChunkSteward.java').text
         if (!modSource.contains("VERSION = \"${version}\"")) {
-            throw new GradleException("LazyChunks.VERSION does not match build.gradle version ${version}")
+            throw new GradleException("ChunkSteward.VERSION does not match build.gradle version ${version}")
         }
         def zip = new java.util.zip.ZipFile(jarFile)
         try {
-            if (zip.getEntry("mixins.lazychunks.refmap.json") == null) {
-                throw new GradleException("mixins.lazychunks.refmap.json missing from ${jarFile.name}")
+            if (zip.getEntry("mixins.chunksteward.refmap.json") == null) {
+                throw new GradleException("mixins.chunksteward.refmap.json missing from ${jarFile.name}")
             }
-            if (zip.getEntry("mixins.lazychunks.early.json") == null) {
-                throw new GradleException("mixins.lazychunks.early.json missing from remapped jar")
+            if (zip.getEntry("mixins.chunksteward.early.json") == null) {
+                throw new GradleException("mixins.chunksteward.early.json missing from remapped jar")
             }
             zip.entries().each { e ->
                 if (!e.name.endsWith(".class")) {

@@ -1,7 +1,7 @@
-package com.apocollis.lazychunks.mixin;
+package com.apocollis.chunksteward.mixin;
 
-import com.apocollis.lazychunks.server.GenMetrics;
-import com.apocollis.lazychunks.server.StageGate;
+import com.apocollis.chunksteward.server.GenMetrics;
+import com.apocollis.chunksteward.server.StageGate;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.IChunkGenerator;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,21 +28,23 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MixinChunk {
 
     @Inject(method = "populate(Lnet/minecraft/world/gen/IChunkGenerator;)V", at = @At("HEAD"), cancellable = true)
-    private void lazychunks$populateHead(IChunkGenerator generator, CallbackInfo ci) {
+    private void chunksteward$populateHead(IChunkGenerator generator, CallbackInfo ci) {
         if (!StageGate.runNow(StageGate.Stage.POPULATE, (Chunk) (Object) this)) {
             ci.cancel();
             return;
         }
+        StageGate.populateEnter((Chunk) (Object) this);
         GenMetrics.enter(GenMetrics.POPULATE);
     }
 
     @Inject(method = "populate(Lnet/minecraft/world/gen/IChunkGenerator;)V", at = @At("RETURN"))
-    private void lazychunks$populateReturn(IChunkGenerator generator, CallbackInfo ci) {
+    private void chunksteward$populateReturn(IChunkGenerator generator, CallbackInfo ci) {
         GenMetrics.exit(GenMetrics.POPULATE);
+        StageGate.populateExit((Chunk) (Object) this);
     }
 
     @Inject(method = "checkLight()V", at = @At("HEAD"), cancellable = true)
-    private void lazychunks$lightHead(CallbackInfo ci) {
+    private void chunksteward$lightHead(CallbackInfo ci) {
         Chunk self = (Chunk) (Object) this;
         // Terrain populated but light not: the retry onTick makes (directly, or via Somnia's/Tweaks' chunkLightCheck).
         // Populate's own call runs before isTerrainPopulated is set, so it is never gated.
@@ -55,7 +57,7 @@ public abstract class MixinChunk {
     }
 
     @Inject(method = "checkLight()V", at = @At("RETURN"))
-    private void lazychunks$lightReturn(CallbackInfo ci) {
+    private void chunksteward$lightReturn(CallbackInfo ci) {
         GenMetrics.exit(GenMetrics.LIGHT);
     }
 }

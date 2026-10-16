@@ -1,13 +1,13 @@
-package com.apocollis.lazychunks.server;
+package com.apocollis.chunksteward.server;
 
-import com.apocollis.lazychunks.config.LazyChunksConfig;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
 
 final class Dimensions {
     private Dimensions() {
     }
 
     static boolean applies(int dimension) {
-        int[] list = LazyChunksConfig.dimensions.list;
+        int[] list = ChunkStewardConfig.dimensions.list;
         boolean listed = false;
         for (int id : list) {
             if (id == dimension) {
@@ -15,6 +15,6 @@ final class Dimensions {
                 break;
             }
         }
-        return LazyChunksConfig.dimensions.whitelist ? listed : !listed;
+        return ChunkStewardConfig.dimensions.whitelist ? listed : !listed;
     }
 }

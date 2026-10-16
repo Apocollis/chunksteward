@@ -1,6 +1,6 @@
-package com.apocollis.lazychunks.server;
+package com.apocollis.chunksteward.server;
 
-import com.apocollis.lazychunks.config.LazyChunksConfig;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import com.google.common.base.Predicate;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.management.PlayerChunkMap;
@@ -35,7 +35,7 @@ public final class ChunkThrottle {
     }
 
     public static boolean provide(PlayerChunkMap map, PlayerChunkMapEntry entry, boolean canGenerate) {
-        if (!canGenerate || !LazyChunksConfig.throttle.enabled) {
+        if (!canGenerate || !ChunkStewardConfig.throttle.enabled) {
             return provided(entry, entry.providePlayerChunk(canGenerate));
         }
         boolean bypass = false;
@@ -75,7 +75,7 @@ public final class ChunkThrottle {
     }
 
     private static boolean withinBudget() {
-        LazyChunksConfig.Throttle cfg = LazyChunksConfig.throttle;
+        ChunkStewardConfig.Throttle cfg = ChunkStewardConfig.throttle;
         if (!TickMonitor.primed || TickMonitor.otherEmaMs < cfg.idleTickMs) {
             return true;
         }
@@ -101,7 +101,7 @@ public final class ChunkThrottle {
      * {@code emergencyMinSpeed}, capped at {@code emergencyMaxRadius}. Walking and sprinting keep the base radius.
      */
     static int emergencyRadius(EntityPlayerMP player) {
-        LazyChunksConfig.Throttle cfg = LazyChunksConfig.throttle;
+        ChunkStewardConfig.Throttle cfg = ChunkStewardConfig.throttle;
         int base = cfg.emergencyRadius;
         if (cfg.emergencyLookaheadTicks <= 0) {
             return base;
