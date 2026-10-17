@@ -96,6 +96,13 @@ final class PopulateQueue {
         return out;
     }
 
+    static void reset() {
+        DIMS.clear();
+        total = 0;
+        draining = false;
+        lastRunTick = Integer.MIN_VALUE / 2;
+    }
+
     static boolean isDraining() {
         return draining;
     }
@@ -131,7 +138,7 @@ final class PopulateQueue {
             return;
         }
         ChunkStewardConfig.Populate cfg = ChunkStewardConfig.populate;
-        boolean starved = TickMonitor.tick - lastRunTick >= cfg.maxStarveTicks;
+        boolean starved = TickMonitor.ticksSince(lastRunTick) >= cfg.maxStarveTicks;
         int done = 0;
         int urgent = 0;
         int rounds = 0;

@@ -78,6 +78,7 @@ public final class StageGate {
     private static long statPopulateDeferred;
     private static long statPopulateCascadeDeferred;
     private static long statPopulateTicketExempt;
+    private static long statBusyIgnored;
     private static long statPopulateResumed;
     private static long statCascades;
     private static long statLightDeferred;
@@ -187,7 +188,11 @@ public final class StageGate {
      * on the chunk.
      */
     private static boolean ticketExempt(World world, int x, int z) {
-        String[] mods = ChunkStewardConfig.populate.ticketExemptMods;
+        return heldByModTicket(world, x, z, ChunkStewardConfig.populate.ticketExemptMods);
+    }
+
+    /** The chunk is held by a Forge chunk ticket owned by one of {@code mods}. */
+    private static boolean heldByModTicket(World world, int x, int z, String[] mods) {
         if (mods == null || mods.length == 0) {
             return false;
         }
@@ -212,7 +217,7 @@ public final class StageGate {
         if (TickMonitor.currentTickMs() < cfg.tickBudgetMs) {
             return true;
         }
-        return populatesThisTick == 0 && TickMonitor.tick - lastPopulateTick >= cfg.maxStarveTicks;
+        return populatesThisTick == 0 && TickMonitor.ticksSince(lastPopulateTick) >= cfg.maxStarveTicks;
     }
 
     /** A populate passed the gate and is starting. */
@@ -252,7 +257,14 @@ public final class StageGate {
             return;
         }
         if (!preloading && !stage2Active) {
-            TickMonitor.countExternalGen();
+            String[] ignore = ChunkStewardConfig.preload.busyIgnoreMods;
+            World world = ignore == null || ignore.length == 0 ? null : DimensionManager.getWorld(dim);
+            if (world != null && heldByModTicket(world, x, z, ignore)) {
+                // A mod building on its own ticketed chunks (a dungeon footprint) is not player demand.
+                statBusyIgnored++;
+            } else {
+                TickMonitor.countExternalGen();
+            }
         }
         if (populateDepth > 0) {
             statCascades++;
@@ -262,6 +274,19 @@ public final class StageGate {
                 ChunkHolds.hold(dim, x, z, cfg.cascadeHoldTicks);
             }
         }
+    }
+
+    static void reset() {
+        populateDepth = 0;
+        java.util.Arrays.fill(FRAMES, null);
+        populatesThisTick = 0;
+        lastPopulateTick = Integer.MIN_VALUE / 2;
+        preloading = false;
+        stage2Active = false;
+        TERRAIN_ONLY.clear();
+        LIGHT_QUEUES.clear();
+        lightQueued = 0;
+        draining = false;
     }
 
     static void beginStage2() {
@@ -453,11 +478,11 @@ public final class StageGate {
     static String reportAndReset() {
         String s = "populate deferred " + statPopulateDeferred + " (cascade " + statPopulateCascadeDeferred
                 + "), resumed " + statPopulateResumed + ", ticket-exempt " + statPopulateTicketExempt
-                + ", cascades " + statCascades + ", "
+                + ", mod-ticket generation " + statBusyIgnored + ", cascades " + statCascades + ", "
                 + PopulateQueue.reportAndReset() + "; light deferred " + statLightDeferred + ", drained "
                 + statLightDrained + ", queued " + lightQueued + "; held " + ChunkHolds.heldCount();
         statPopulateDeferred = statPopulateCascadeDeferred = statPopulateResumed = statCascades = 0L;
-        statPopulateTicketExempt = 0L;
+        statPopulateTicketExempt = statBusyIgnored = 0L;
         statLightDeferred = statLightDrained = 0L;
         return s;
     }

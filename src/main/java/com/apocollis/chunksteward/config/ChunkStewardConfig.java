@@ -20,13 +20,22 @@ public class ChunkStewardConfig {
         @Config.Comment("Master switch for the adaptive chunk throttle.")
         public boolean enabled = true;
 
-        @Config.Comment({"Measured TPS (over about the last 5 seconds) at or above which the server counts as having room:",
-                "chunk work may use the rest of a 50 ms tick. Between tpsLoaded and tpsFull the allowance scales linearly",
-                "down to nothing. Measured TPS is min(20, 1000 / average tick work), so any average under 50 ms reads 20."})
+        @Config.Comment({"While the average tick work (about the last 20 ticks) is under 50 ms the server runs at 20 TPS: admit",
+                "chunks whenever the current tick has not used 50 ms yet. Above that average, targetTickMs applies.",
+                "false = only the targetTickMs headroom rule (the behaviour before 0.3's pacing API)."})
+        public boolean admitAtFullTps = true;
+
+        @Config.Comment("Target server tick work in ms. Chunk generation only gets the headroom left under this.")
+        @Config.RangeDouble(min = 5.0, max = 50.0)
+        public double targetTickMs = 40.0;
+
+        @Config.Comment({"Measured TPS (over about the last 5 seconds) at or above which the server counts as having room.",
+                "Reported only (status log, /chunksteward status, ChunkStewardAPI.getLoadFactor and isServerBehind); it",
+                "does not gate chunks. Measured TPS is min(20, 1000 / average tick work), so any average under 50 ms reads 20."})
         @Config.RangeDouble(min = 5.0, max = 20.0)
         public double tpsFull = 20.0;
 
-        @Config.Comment("Measured TPS at or below which the server counts as under load: chunks get only the starvation minimum.")
+        @Config.Comment("Measured TPS at or below which the server counts as under load (load factor 0). Reported only, see tpsFull.")
         @Config.RangeDouble(min = 1.0, max = 19.9)
         public double tpsLoaded = 15.0;
 
@@ -181,6 +190,13 @@ public class ChunkStewardConfig {
                 "busyWindowTicks ticks: the server is busy generating chunks players need."})
         @Config.RangeInt(min = 1, max = 1000)
         public int busyChunks = 6;
+
+        @Config.Comment({"Mod ids whose Forge chunk tickets mark generation as the mod's own work, not player demand: a chunk",
+                "generated while held by a ticket owned by one of these mods does not count toward busyChunks, so preload,",
+                "stage 2 and ChunkStewardAPI.isGeneratingChunks() do not report it. For mods that force their footprint",
+                "chunks on a ticket right before loading them and pace themselves on isGeneratingChunks(), such as",
+                "Roguelike Dungeons (roguelike), which otherwise paused its own build. Empty list = count everything."})
+        public String[] busyIgnoreMods = {"roguelike"};
 
         @Config.Comment("Window for busyChunks, in ticks (100 = 5 s, at most 250).")
         @Config.RangeInt(min = 1, max = 250)

@@ -93,6 +93,11 @@ public final class IdlePreload {
     private IdlePreload() {
     }
 
+    static void reset() {
+        STATES.clear();
+        rotate = 0;
+    }
+
     @SubscribeEvent
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         STATES.remove(event.player.getUniqueID());
@@ -190,7 +195,7 @@ public final class IdlePreload {
     /** Generates the next missing chunk in the player's queue. Returns true if a chunk was generated. */
     private static boolean preloadOne(EntityPlayerMP player, PlayerState state, int tier,
                                       ChunkStewardConfig.Preload cfg) {
-        if (TickMonitor.tick - state.windowStart >= MINUTE_TICKS) {
+        if (TickMonitor.ticksSince(state.windowStart) >= MINUTE_TICKS) {
             state.windowStart = TickMonitor.tick;
             state.windowCount = 0;
         }
@@ -265,7 +270,7 @@ public final class IdlePreload {
         if (state.queue == null || state.queueTier != tier || state.builtView != view) {
             return true;
         }
-        if (tier != TIER_MOVING || TickMonitor.tick - state.builtTick < REBUILD_MIN_TICKS) {
+        if (tier != TIER_MOVING || TickMonitor.ticksSince(state.builtTick) < REBUILD_MIN_TICKS) {
             return false;
         }
         int cx = ((int) Math.floor(player.posX)) >> 4;

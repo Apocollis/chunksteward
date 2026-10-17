@@ -12,7 +12,7 @@
 | `getLoadFactor()` (v2) | 1.0 when measured TPS is at `throttle.tpsFull` (20: the server has room), 0.0 at `throttle.tpsLoaded` (15: under load), linear in between. Scale optional work by it |
 | `getRemainingTickBudgetMs(double targetMs)` | `targetMs` minus the time the current tick has used so far, never below 0; returns `targetMs` off the server thread or before the first measurement. For in-tick decisions |
 | `isServerBehind()` | measured TPS is below `throttle.tpsFull`: the server is not holding a full 20 TPS |
-| `isGeneratingChunks()` | chunks are being generated for players at the rate where preload holds off (`preload.busyChunks` in `preload.busyWindowTicks`); a good moment to pause optional work |
+| `isGeneratingChunks()` | chunks are being generated for players at the rate where preload holds off (`preload.busyChunks` in `preload.busyWindowTicks`); a good moment to pause optional work. Chunks a mod in `preload.busyIgnoreMods` (default `roguelike`) generates on its own Forge ticket are not counted, so a dungeon build does not see its own footprint loading as player demand |
 | `getPopulateQueueSize()` | chunks whose populate is queued behind the tick budget |
 
 Call it on the server thread. The averages lag by about 20 ticks: use them for pacing (how much to attempt per tick), not for exact decisions about the current tick.

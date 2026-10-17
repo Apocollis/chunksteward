@@ -22,6 +22,10 @@ public final class GeneratedCache {
     private GeneratedCache() {
     }
 
+    static void reset() {
+        BY_DIM.clear();
+    }
+
     static boolean known(int dim, int x, int z) {
         LongOpenHashSet set = BY_DIM.get(dim);
         return set != null && set.contains(ChunkPos.asLong(x, z));

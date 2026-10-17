@@ -56,6 +56,13 @@ public final class TickMonitor {
     }
 
     public static void onTickStart(int serverTick) {
+        // The integrated server restarts its tick counter at 0 for every world entered: everything keyed on tick numbers
+        // (and everything that belongs to the previous save) must be cleared, or comparisons against stale ticks go wrong.
+        if (serverTick < tick) {
+            SessionState.reset("tick counter went backwards, " + tick + " -> " + serverTick);
+        } else if (serverThread != null && serverThread != Thread.currentThread()) {
+            SessionState.reset("a different thread is running the server");
+        }
         tick = serverTick;
         serverThread = Thread.currentThread();
         GenMetrics.onTickStart();
@@ -193,10 +200,41 @@ public final class TickMonitor {
         lastSaveTick = tick;
     }
 
+    /**
+     * Ticks since {@code then}, or {@link Integer#MAX_VALUE} if that tick number lies in the future (a stale value from
+     * before the tick counter restarted): a stale tick counts as long ago, never as recent.
+     */
+    static int ticksSince(int then) {
+        int d = tick - then;
+        return d < 0 ? Integer.MAX_VALUE : d;
+    }
+
     /** True on a save tick and for the configured number of ticks after. Autosave runs at the end of every 900th tick. */
     static boolean savePaused() {
         int pause = ChunkStewardConfig.throttle.savePauseTicks;
-        return tick % 900 == 0 || tick - lastSaveTick <= pause;
+        return tick % 900 == 0 || ticksSince(lastSaveTick) <= pause;
+    }
+
+    /** Back to a fresh session: tick numbers, measurements and caches (see {@link SessionState}). */
+    static void reset() {
+        tick = 0;
+        serverThread = null;
+        lastGenTick = Integer.MIN_VALUE / 2;
+        lastSaveTick = Integer.MIN_VALUE / 2;
+        generatedThisTick = 0;
+        externalGenThisTick = 0;
+        java.util.Arrays.fill(EXTERNAL_RING, 0);
+        recentCacheTick = -1;
+        recentCacheWindow = -1;
+        waitingCacheTick = -1;
+        java.util.Arrays.fill(WORK_RING, 0.0);
+        ringCount = 0;
+        ringPos = 0;
+        ringSum = 0.0;
+        primed = false;
+        totalEmaMs = 0.0;
+        otherEmaMs = 0.0;
+        chunkEmaMs = 0.0;
     }
 
     static double currentTickMs() {

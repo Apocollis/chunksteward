@@ -27,11 +27,15 @@ public final class Warmup {
                 return false;
             }
             Integer joined = JOINED.get(player.getUniqueID());
-            return joined != null && TickMonitor.tick - joined < ChunkStewardConfig.throttle.warmupTicks;
+            return joined != null && TickMonitor.ticksSince(joined) < ChunkStewardConfig.throttle.warmupTicks;
         }
     };
 
     private Warmup() {
+    }
+
+    static void reset() {
+        JOINED.clear();
     }
 
     static boolean isWarm(PlayerChunkMapEntry entry) {

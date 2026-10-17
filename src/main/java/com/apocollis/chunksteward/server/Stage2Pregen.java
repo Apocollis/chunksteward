@@ -74,6 +74,14 @@ public final class Stage2Pregen {
     private Stage2Pregen() {
     }
 
+    static void reset() {
+        WORK.clear();
+        rotate = 0;
+        activeDim = Integer.MIN_VALUE;
+        activeId = -1;
+        activeWhat = "-";
+    }
+
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
@@ -159,7 +167,7 @@ public final class Stage2Pregen {
                                 ChunkStewardConfig.Stage2 cfg) {
         int dim = world.provider.getDimension();
         Work w = WORK.computeIfAbsent(workKey(dim, h.id), k -> new Work());
-        if (TickMonitor.tick - w.windowStart >= MINUTE_TICKS) {
+        if (TickMonitor.ticksSince(w.windowStart) >= MINUTE_TICKS) {
             w.windowStart = TickMonitor.tick;
             w.windowCount = 0;
         }

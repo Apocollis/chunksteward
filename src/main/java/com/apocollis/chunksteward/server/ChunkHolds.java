@@ -61,6 +61,11 @@ public final class ChunkHolds {
         release(new Held(dim, x, z, TickMonitor.tick, 0));
     }
 
+    static void reset() {
+        HELD.clear();
+        RELEASED.clear();
+    }
+
     static int heldCount() {
         return HELD.size();
     }

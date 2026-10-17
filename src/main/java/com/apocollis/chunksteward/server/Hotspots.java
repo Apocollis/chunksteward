@@ -48,6 +48,10 @@ public final class Hotspots {
     private Hotspots() {
     }
 
+    static void reset() {
+        STATES.clear();
+    }
+
     @SubscribeEvent
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.player instanceof EntityPlayerMP && ChunkStewardConfig.stage2.enabled) {

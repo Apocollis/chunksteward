@@ -14,12 +14,8 @@ import net.minecraft.util.math.ChunkPos;
 public final class ChunkThrottle {
     private static final double INITIAL_COST_MS = 10.0;
     private static final double FULL_TICK_MS = 50.0;
-    private static final double CREDIT_FLOOR_MS = -200.0;
     private static double genCostEmaMs = INITIAL_COST_MS;
 
-    /** Chunk work the server may still spend (ms); accrues each tick, is spent by every provided chunk, may go negative. */
-    private static double credit;
-    private static int creditTick = Integer.MIN_VALUE;
 
     private static int emergencyX;
     private static int emergencyZ;
@@ -40,8 +36,10 @@ public final class ChunkThrottle {
     private ChunkThrottle() {
     }
 
-    static double credit() {
-        return credit;
+    static void reset() {
+        genCostEmaMs = INITIAL_COST_MS;
+        emergencyX = 0;
+        emergencyZ = 0;
     }
 
     public static boolean provide(PlayerChunkMap map, PlayerChunkMapEntry entry, boolean canGenerate) {
@@ -74,7 +72,7 @@ public final class ChunkThrottle {
         } else if (!withinBudget()) {
             TickMonitor.countSkipped();
             if (debug) {
-                Diagnostics.provide("deferred: credit", map, entry, true);
+                Diagnostics.provide("deferred: headroom", map, entry, true);
             }
             return false;
         }
@@ -89,7 +87,6 @@ public final class ChunkThrottle {
         boolean provided = entry.providePlayerChunk(true);
         long spent = System.nanoTime() - start;
         TickMonitor.chunkNanos += spent;
-        credit = Math.max(CREDIT_FLOOR_MS, credit - spent / 1.0e6);
         if (provided) {
             genCostEmaMs += 0.2 * (spent / 1.0e6 - genCostEmaMs);
             TickMonitor.lastGenTick = TickMonitor.tick;
@@ -108,32 +105,33 @@ public final class ChunkThrottle {
     }
 
     /**
-     * Credit-based admission. Each tick the server earns {@code (50 - non-chunk work) * loadFactor} ms of chunk work
-     * (the whole rest of the tick while measured TPS is at {@code tpsFull}, nothing at {@code tpsLoaded} or below). A
-     * chunk is admitted while the balance is positive and its real cost is subtracted, so the balance can go negative
-     * and the following ticks pay it back. The average chunk work per tick then equals the allowance, even when one chunk
-     * costs more than a single tick's share.
+     * Per-tick headroom admission (the behaviour before the pacing API): below {@code idleTickMs} of non-chunk work the
+     * server is idle and chunks load at vanilla speed; otherwise a chunk may generate while this tick's chunk time plus
+     * the average cost of one chunk stays within {@code targetTickMs - non-chunk work}. The starvation guard admits one
+     * chunk every {@code maxStarveTicks} even when the server is busy. Measured TPS and the load factor are only reported
+     * (status log, {@code ChunkStewardAPI}); they do not gate chunks.
+     *
+     * <p>Before that, with {@code admitAtFullTps}: while the whole-tick average (about 20 ticks) is under 50 ms the server
+     * runs at 20 TPS, so a chunk is admitted whenever the current tick has not used 50 ms yet. In this pack one chunk
+     * costs 25 to 50 ms, more than the headroom under {@code targetTickMs}, so the headroom rule alone held chunks to the
+     * starvation rate (5 a second) at 20 TPS.
      */
     private static boolean withinBudget() {
         ChunkStewardConfig.Throttle cfg = ChunkStewardConfig.throttle;
         if (!TickMonitor.primed || TickMonitor.otherEmaMs < cfg.idleTickMs) {
-            credit = 0.0;
             return true;
         }
-        if (creditTick != TickMonitor.tick) {
-            int elapsed = creditTick == Integer.MIN_VALUE ? 1 : Math.min(TickMonitor.tick - creditTick, 20);
-            creditTick = TickMonitor.tick;
-            double factor = TickMonitor.loadFactor();
-            double allowance = Math.max(0.0, FULL_TICK_MS - TickMonitor.otherEmaMs) * factor;
-            double cap = Math.max(30.0, 1.5 * genCostEmaMs) * factor;
-            credit = Math.min(cap, credit + allowance * elapsed);
+        if (cfg.admitAtFullTps && TickMonitor.totalEmaMs < FULL_TICK_MS && TickMonitor.currentTickMs() < FULL_TICK_MS) {
+            return true;
         }
-        if (credit > 0.0) {
+        double allowanceMs = cfg.targetTickMs - TickMonitor.otherEmaMs;
+        double usedMs = TickMonitor.chunkNanos / 1.0e6;
+        if (usedMs + genCostEmaMs <= allowanceMs) {
             return true;
         }
         // Starvation guard: one chunk per maxStarveTicks even when the server is busy.
         return TickMonitor.generatedThisTick == 0
-                && TickMonitor.tick - TickMonitor.lastGenTick >= cfg.maxStarveTicks;
+                && TickMonitor.ticksSince(TickMonitor.lastGenTick) >= cfg.maxStarveTicks;
     }
 
     private static boolean isEmergency(PlayerChunkMapEntry entry) {

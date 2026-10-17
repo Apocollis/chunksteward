@@ -45,6 +45,10 @@ public final class PlayerMotion {
     private PlayerMotion() {
     }
 
+    static void reset() {
+        STATES.clear();
+    }
+
     static State get(EntityPlayer player) {
         return STATES.get(player.getUniqueID());
     }
