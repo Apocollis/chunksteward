@@ -4,12 +4,14 @@
 
 | Method | Returns |
 | --- | --- |
-| `API_VERSION` | `1`; incremented when methods are added, never changes the meaning of an existing method |
+| `API_VERSION` | `2`; incremented when methods are added, never changes the meaning of an existing method |
 | `getAverageTickMs()` | average ms of whole-tick work over about the last 20 ticks (0 before the first measurement) |
 | `getNonChunkTickMs()` | the same, excluding chunk provision (what entities, mods and everything else cost) |
-| `getHeadroomMs()` | spare ms per tick on average: `throttle.targetTickMs` (40) minus the average, never below 0 |
+| `getHeadroomMs()` | spare ms per tick on average: what is left of a 50 ms tick after the average, times `getLoadFactor()`, never below 0 |
+| `getMeasuredTps()` (v2) | measured TPS over about 5 s: `min(20, 1000 / mean tick work)` |
+| `getLoadFactor()` (v2) | 1.0 when measured TPS is at `throttle.tpsFull` (20: the server has room), 0.0 at `throttle.tpsLoaded` (15: under load), linear in between. Scale optional work by it |
 | `getRemainingTickBudgetMs(double targetMs)` | `targetMs` minus the time the current tick has used so far, never below 0; returns `targetMs` off the server thread or before the first measurement. For in-tick decisions |
-| `isServerBehind()` | the average is at or over `throttle.targetTickMs` |
+| `isServerBehind()` | measured TPS is below `throttle.tpsFull`: the server is not holding a full 20 TPS |
 | `isGeneratingChunks()` | chunks are being generated for players at the rate where preload holds off (`preload.busyChunks` in `preload.busyWindowTicks`); a good moment to pause optional work |
 | `getPopulateQueueSize()` | chunks whose populate is queued behind the tick budget |
 

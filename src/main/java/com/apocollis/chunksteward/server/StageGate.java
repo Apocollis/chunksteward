@@ -120,7 +120,22 @@ public final class StageGate {
         preloading = false;
     }
 
+    private static String populateCode = "";
+
+    private static boolean ret(String code, boolean value) {
+        populateCode = code;
+        return value;
+    }
+
     private static boolean populateNow(Chunk chunk) {
+        boolean run = populateDecision(chunk);
+        if (ChunkStewardConfig.logging.debug) {
+            Diagnostics.populate(populateCode, run, chunk);
+        }
+        return run;
+    }
+
+    private static boolean populateDecision(Chunk chunk) {
         World world = chunk.getWorld();
         int dim = world.provider.getDimension();
         long key = ChunkPos.asLong(chunk.x, chunk.z);
@@ -128,42 +143,42 @@ public final class StageGate {
             LongOpenHashSet set = TERRAIN_ONLY.get(preloadDim);
             if (set != null && set.contains(key)) {
                 statPopulateDeferred++;
-                return false;
+                return ret("preload terrain-only chunk", false);
             }
         }
         ChunkStewardConfig.Populate cfg = ChunkStewardConfig.populate;
         if (!cfg.enabled || world.isRemote || Thread.currentThread() != TickMonitor.serverThread
                 || !Dimensions.applies(dim)) {
-            return true;
+            return ret("pass: disabled, client, other thread or excluded dimension", true);
         }
         if (populateDepth == 0 && (PopulateQueue.isDraining() || stage2Active)) {
-            return true;
+            return ret("pass: queue drain or stage 2", true);
         }
         if (populateDepth == 0 && ticketExempt(world, chunk.x, chunk.z)) {
             PopulateQueue.remove(dim, key);
             statPopulateTicketExempt++;
-            return true;
+            return ret("pass: ticket exempt", true);
         }
         if (PopulateQueue.contains(dim, key)) {
-            return false;
+            return ret("already queued", false);
         }
         if (PopulateQueue.nearPlayer(world, chunk.x, chunk.z, cfg.protectRadius)
                 || Warmup.anyWarmNear(world, chunk.x, chunk.z)) {
-            return true;
+            return ret("near a player or login warmup", true);
         }
         boolean cascade = populateDepth > 0 && cfg.cascadeDeferral;
         if (!cascade && withinPopulateBudget(cfg)) {
-            return true;
+            return ret("within budget", true);
         }
         if (!PopulateQueue.enqueue(dim, key)) {
-            return true;
+            return ret("queue full", true);
         }
         if (cascade) {
             statPopulateCascadeDeferred++;
-        } else {
-            statPopulateDeferred++;
+            return ret("cascade", false);
         }
-        return false;
+        statPopulateDeferred++;
+        return ret("over budget", false);
     }
 
     /**

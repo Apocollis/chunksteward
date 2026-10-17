@@ -16,7 +16,7 @@ import com.apocollis.chunksteward.server.PacingView;
  */
 public final class ChunkStewardAPI {
     /** Incremented when methods are added. Never changes the meaning of an existing method. */
-    public static final int API_VERSION = 1;
+    public static final int API_VERSION = 2;
 
     private ChunkStewardAPI() {
     }
@@ -31,9 +31,25 @@ public final class ChunkStewardAPI {
         return PacingView.nonChunkTickMs();
     }
 
-    /** Spare ms per tick on average: Chunk Steward's tick target minus {@link #getAverageTickMs()}, never below 0. */
+    /**
+     * Spare ms per tick on average: what is left of a 50 ms tick after {@link #getAverageTickMs()}, scaled by
+     * {@link #getLoadFactor()}, never below 0. Under load (low TPS) it shrinks to nothing even when the average looks low.
+     */
     public static double getHeadroomMs() {
-        return Math.max(0.0, PacingView.targetTickMs() - PacingView.averageTickMs());
+        return Math.max(0.0, 50.0 - PacingView.averageTickMs()) * PacingView.loadFactor();
+    }
+
+    /** Measured TPS over about the last 5 seconds; 20 whenever the average tick work is at most 50 ms. (Version 2.) */
+    public static double getMeasuredTps() {
+        return PacingView.measuredTps();
+    }
+
+    /**
+     * 1.0 when the server has room (measured TPS at {@code throttle.tpsFull}, default 20), 0.0 when it is under load
+     * (at or below {@code throttle.tpsLoaded}, default 15), linear in between. Scale optional work by this. (Version 2.)
+     */
+    public static double getLoadFactor() {
+        return PacingView.loadFactor();
     }
 
     /**
@@ -45,9 +61,9 @@ public final class ChunkStewardAPI {
         return Math.max(0.0, targetMs - PacingView.currentTickElapsedMs());
     }
 
-    /** The average tick work is at or over Chunk Steward's tick target: the server is struggling to keep up. */
+    /** Measured TPS is below {@code throttle.tpsFull}: the server is not keeping a full 20 TPS. */
     public static boolean isServerBehind() {
-        return PacingView.averageTickMs() >= PacingView.targetTickMs();
+        return PacingView.loadFactor() < 1.0;
     }
 
     /** Chunks are being generated for players at the rate where preload holds off. A good moment to pause optional work. */

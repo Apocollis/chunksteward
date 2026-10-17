@@ -20,9 +20,14 @@ public final class PacingView {
         return TickMonitor.primed ? TickMonitor.otherEmaMs : 0.0;
     }
 
-    /** The throttle's target tick work in ms ({@code throttle.targetTickMs}). */
-    public static double targetTickMs() {
-        return ChunkStewardConfig.throttle.targetTickMs;
+    /** Measured TPS over about the last 100 ticks: 20 while the mean tick work is at most 50 ms. */
+    public static double measuredTps() {
+        return TickMonitor.measuredTps();
+    }
+
+    /** 1 = the server has room (TPS at {@code throttle.tpsFull}), 0 = under load (at or below {@code tpsLoaded}). */
+    public static double loadFactor() {
+        return TickMonitor.loadFactor();
     }
 
     /** Ms the current tick has used so far, or 0 off the server thread (where the figure is meaningless). */

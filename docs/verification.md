@@ -37,6 +37,7 @@
 | Switches | `stage2.enabled = false`: nothing runs; `/chunksteward pregen pause|resume` works; `maxTotalChunks` stops it | not run |
 | Commands | `status`, `chunkinfo`, `queue`, `holds`, `log`, `hotspots list|here|add|remove|reset` and tab completion | not run |
 | Attribution | with `statusIntervalSeconds = 5`, generate a village and a mineshaft: `structures:` names the classes, `map-gens:` names the caves/ravine/village layout classes, and the populate parts add up to the populate total | not run |
+| TPS target | 20/15 defaults: with `statusIntervalSeconds = 5`, fly and teleport: the status line shows `TPS` and `load factor`; chunks per second is higher than with the earlier `targetTickMs = 40` throttle (8 chunks/s in the earlier run) while TPS stays at 20; a deliberate load (spawn many mobs) lowers measured TPS and the load factor and chunk work backs off | not run |
 | Pacing API | a consumer mod (Tweaks or Roguelike) calls `ChunkStewardAPI` through a guarded holder: values change with load, and the mod runs unchanged when Chunk Steward is absent | not run |
 
 ## 0.2

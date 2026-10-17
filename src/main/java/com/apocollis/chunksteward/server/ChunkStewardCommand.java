@@ -138,8 +138,10 @@ public class ChunkStewardCommand extends CommandBase {
                 + onOff(ChunkStewardConfig.randomTicks.guardEnabled) + ", preload "
                 + onOff(ChunkStewardConfig.preload.enabled) + ", stage 2 " + onOff(ChunkStewardConfig.stage2.enabled)
                 + (Pregen.paused ? " (pregen PAUSED this session)" : ""));
-        send(sender, String.format("tick avg %.1f ms (non-chunk %.1f ms, chunk %.1f ms)", TickMonitor.totalEmaMs,
-                TickMonitor.otherEmaMs, TickMonitor.chunkEmaMs));
+        send(sender, String.format("tick avg %.1f ms (non-chunk %.1f ms, chunk %.1f ms), measured TPS %.2f, load factor %.2f"
+                        + " (full at %.1f TPS, none at %.1f)", TickMonitor.totalEmaMs, TickMonitor.otherEmaMs,
+                TickMonitor.chunkEmaMs, TickMonitor.measuredTps(), TickMonitor.loadFactor(),
+                ChunkStewardConfig.throttle.tpsFull, ChunkStewardConfig.throttle.tpsLoaded));
         send(sender, "populate queue " + PopulateQueue.size() + ", held chunks " + ChunkHolds.heldCount()
                 + ", chunks waiting for players " + TickMonitor.waitingNow());
         ChunkStewardConfig.Stage2 s2 = ChunkStewardConfig.stage2;

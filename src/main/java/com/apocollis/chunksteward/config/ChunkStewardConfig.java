@@ -20,9 +20,15 @@ public class ChunkStewardConfig {
         @Config.Comment("Master switch for the adaptive chunk throttle.")
         public boolean enabled = true;
 
-        @Config.Comment("Target server tick work in ms. Chunk generation only gets the headroom left under this.")
-        @Config.RangeDouble(min = 5.0, max = 50.0)
-        public double targetTickMs = 40.0;
+        @Config.Comment({"Measured TPS (over about the last 5 seconds) at or above which the server counts as having room:",
+                "chunk work may use the rest of a 50 ms tick. Between tpsLoaded and tpsFull the allowance scales linearly",
+                "down to nothing. Measured TPS is min(20, 1000 / average tick work), so any average under 50 ms reads 20."})
+        @Config.RangeDouble(min = 5.0, max = 20.0)
+        public double tpsFull = 20.0;
+
+        @Config.Comment("Measured TPS at or below which the server counts as under load: chunks get only the starvation minimum.")
+        @Config.RangeDouble(min = 1.0, max = 19.9)
+        public double tpsLoaded = 15.0;
 
         @Config.Comment("When the average non-chunk tick work is below this many ms the server is idle and chunks load at full vanilla speed.")
         @Config.RangeDouble(min = 0.0, max = 50.0)
@@ -306,6 +312,11 @@ public class ChunkStewardConfig {
                 "Stage and world generator timing is only collected while this is above 0."})
         @Config.RangeInt(min = 0, max = 3600)
         public int statusIntervalSeconds = 0;
+
+        @Config.Comment({"TEMPORARY diagnostics, verbose: every second, why chunk provision calls were passed, bypassed,",
+                "admitted or deferred and what the populate gate did, plus a scan of the chunks around each player",
+                "(missing, loaded but unpopulated, and why). Every line starts with 'dbg': grep dbg latest.log."})
+        public boolean debug = false;
 
         @Config.Comment("Number of slowest world generators (IWorldGenerator classes) listed in the status log.")
         @Config.RangeInt(min = 0, max = 50)
