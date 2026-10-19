@@ -111,17 +111,19 @@ public final class ChunkThrottle {
      * chunk every {@code maxStarveTicks} even when the server is busy. Measured TPS and the load factor are only reported
      * (status log, {@code ChunkStewardAPI}); they do not gate chunks.
      *
-     * <p>Before that, with {@code admitAtFullTps}: while the whole-tick average (about 20 ticks) is under 50 ms the server
-     * runs at 20 TPS, so a chunk is admitted whenever the current tick has not used 50 ms yet. In this pack one chunk
-     * costs 25 to 50 ms, more than the headroom under {@code targetTickMs}, so the headroom rule alone held chunks to the
-     * starvation rate (5 a second) at 20 TPS.
+     * <p>Before that, with {@code admitAtFullTps}: while the server holds 20 TPS (measured TPS at {@code tpsFull}, or the
+     * whole-tick average of about 20 ticks under 50 ms) every chunk is admitted, however long the current tick already
+     * is; vanilla's own loop still stops 50 ms after a success. If chunk work pushes the average past 50 ms, TPS drops
+     * below 20 and the headroom rule takes over. In this pack one chunk costs 25 to 50 ms, more than the headroom under
+     * {@code targetTickMs}, so the headroom rule alone held chunks to the starvation rate (5 a second) at 20 TPS.
      */
     private static boolean withinBudget() {
         ChunkStewardConfig.Throttle cfg = ChunkStewardConfig.throttle;
         if (!TickMonitor.primed || TickMonitor.otherEmaMs < cfg.idleTickMs) {
             return true;
         }
-        if (cfg.admitAtFullTps && TickMonitor.totalEmaMs < FULL_TICK_MS && TickMonitor.currentTickMs() < FULL_TICK_MS) {
+        if (cfg.admitAtFullTps
+                && (TickMonitor.measuredTps() >= cfg.tpsFull || TickMonitor.totalEmaMs < FULL_TICK_MS)) {
             return true;
         }
         double allowanceMs = cfg.targetTickMs - TickMonitor.otherEmaMs;

@@ -20,20 +20,22 @@ public class ChunkStewardConfig {
         @Config.Comment("Master switch for the adaptive chunk throttle.")
         public boolean enabled = true;
 
-        @Config.Comment({"While the average tick work (about the last 20 ticks) is under 50 ms the server runs at 20 TPS: admit",
-                "chunks whenever the current tick has not used 50 ms yet. Above that average, targetTickMs applies.",
-                "false = only the targetTickMs headroom rule (the behaviour before 0.3's pacing API)."})
+        @Config.Comment({"While the server holds 20 TPS (measured TPS at tpsFull, or the average tick work of about the last 20",
+                "ticks under 50 ms), admit every chunk, however long the current tick already is; vanilla still stops",
+                "after 50 ms per tick. Below 20 TPS, targetTickMs applies. false = only the targetTickMs headroom rule",
+                "(the behaviour before 0.3's pacing API)."})
         public boolean admitAtFullTps = true;
 
         @Config.Comment("Target server tick work in ms. Chunk generation only gets the headroom left under this.")
         @Config.RangeDouble(min = 5.0, max = 50.0)
         public double targetTickMs = 40.0;
 
-        @Config.Comment({"Measured TPS (over about the last 5 seconds) at or above which the server counts as having room.",
+        @Config.Comment({"Measured TPS (over about the last 5 seconds) at or above which the server counts as having room (load factor 1).",
+                "Slightly under 20 on purpose: a 100-tick mean of 50.3 ms reads 19.88 TPS, which should still count as full.",
                 "Reported only (status log, /chunksteward status, ChunkStewardAPI.getLoadFactor and isServerBehind); it",
                 "does not gate chunks. Measured TPS is min(20, 1000 / average tick work), so any average under 50 ms reads 20."})
         @Config.RangeDouble(min = 5.0, max = 20.0)
-        public double tpsFull = 20.0;
+        public double tpsFull = 19.5;
 
         @Config.Comment("Measured TPS at or below which the server counts as under load (load factor 0). Reported only, see tpsFull.")
         @Config.RangeDouble(min = 1.0, max = 19.9)

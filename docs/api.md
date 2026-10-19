@@ -9,9 +9,9 @@
 | `getNonChunkTickMs()` | the same, excluding chunk provision (what entities, mods and everything else cost) |
 | `getHeadroomMs()` | spare ms per tick on average: what is left of a 50 ms tick after the average, times `getLoadFactor()`, never below 0 |
 | `getMeasuredTps()` (v2) | measured TPS over about 5 s: `min(20, 1000 / mean tick work)` |
-| `getLoadFactor()` (v2) | 1.0 when measured TPS is at `throttle.tpsFull` (20: the server has room), 0.0 at `throttle.tpsLoaded` (15: under load), linear in between. Scale optional work by it |
+| `getLoadFactor()` (v2) | 1.0 when measured TPS is at or above `throttle.tpsFull` (19.5: the server has room), 0.0 at `throttle.tpsLoaded` (15: under load), linear in between. Scale optional work by it |
 | `getRemainingTickBudgetMs(double targetMs)` | `targetMs` minus the time the current tick has used so far, never below 0; returns `targetMs` off the server thread or before the first measurement. For in-tick decisions |
-| `isServerBehind()` | measured TPS is below `throttle.tpsFull`: the server is not holding a full 20 TPS |
+| `isServerBehind()` | measured TPS is below `throttle.tpsFull` (19.5): the server is not holding a full 20 TPS |
 | `isGeneratingChunks()` | chunks are being generated for players at the rate where preload holds off (`preload.busyChunks` in `preload.busyWindowTicks`); a good moment to pause optional work. Chunks a mod in `preload.busyIgnoreMods` (default `roguelike`) generates on its own Forge ticket are not counted, so a dungeon build does not see its own footprint loading as player demand |
 | `getPopulateQueueSize()` | chunks whose populate is queued behind the tick budget |
 
