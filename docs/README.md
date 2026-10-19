@@ -6,6 +6,8 @@ Formerly Lazy Chunks 1.12 (modid `lazychunks`); renamed to Chunk Steward (modid 
 
 Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Code is written from scratch.
 
+**Requirements:** CleanroomMC (Cleanroom loader with MixinBooter/CleanMix) on Java 21. The jar is Java 21 bytecode and is marked as a Cleanroom mod, so Forge on Java 8 is not supported. Licence: MIT ([../LICENSE](../LICENSE)).
+
 **Always compile as Java 21** (`options.release = 21`, class major 65), even on the JDK 25 toolchain. See [build-and-release.md](build-and-release.md).
 
 | System | Doc |

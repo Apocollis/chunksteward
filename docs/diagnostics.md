@@ -1,6 +1,6 @@
-# Diagnostics (temporary)
+# Diagnostics
 
-`logging.debug` (default false) turns on verbose diagnostics for chasing chunk loading problems. Every line starts with `dbg`: `grep dbg latest.log`. It needs no status log setting. Two sanity checks run even with debug off, because they would mean a bug (at most one warning per 10 s): the random-tick guard still active while player chunks are provided (it would hand out empty chunks), and a player chunk map entry holding an `EmptyChunk` (it would never load).
+`logging.debug` (default false; leave it off in normal play, it is verbose) turns on verbose diagnostics for chasing chunk loading problems. Every line starts with `dbg`: `grep dbg latest.log`. It needs no status log setting. Two sanity checks run even with debug off, because they would mean a bug (at most one warning per 10 s): the random-tick guard still active while player chunks are provided (it would hand out empty chunks), and a player chunk map entry holding an `EmptyChunk` (it would never load).
 
 ## Once a second
 

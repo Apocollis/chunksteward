@@ -67,6 +67,8 @@ public final class IdlePreload {
         double lastZ;
         int lastDim = Integer.MIN_VALUE;
         int stillTicks;
+        /** Ticks since the last movement sample; starts high so a new player is sampled on the first tick. */
+        int sinceSample = Integer.MAX_VALUE / 2;
         ArrayDeque<Target> queue;
         int queueTier;
         int builtCx;
@@ -180,6 +182,15 @@ public final class IdlePreload {
 
     private static void track(EntityPlayerMP player) {
         PlayerState state = STATES.computeIfAbsent(player.getUniqueID(), id -> new PlayerState());
+        if (state.sinceSample < Integer.MAX_VALUE / 4) {
+            state.sinceSample++;
+        }
+        int sampleTicks = Math.max(1, ChunkStewardConfig.movement.sampleTicks);
+        if (state.sinceSample < sampleTicks) {
+            return;
+        }
+        int elapsed = Math.min(state.sinceSample, 4 * sampleTicks);
+        state.sinceSample = 0;
         double dx = player.posX - state.lastX;
         double dz = player.posZ - state.lastZ;
         if (player.dimension != state.lastDim || dx * dx + dz * dz > MOVE_EPSILON_SQ) {
@@ -187,8 +198,8 @@ public final class IdlePreload {
             state.lastZ = player.posZ;
             state.lastDim = player.dimension;
             state.stillTicks = 0;
-        } else if (state.stillTicks < Integer.MAX_VALUE) {
-            state.stillTicks++;
+        } else if (state.stillTicks < Integer.MAX_VALUE - elapsed) {
+            state.stillTicks += elapsed;
         }
     }
 

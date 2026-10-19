@@ -8,7 +8,7 @@ All radii are measured from the live view distance (`PlayerChunkMap.playerViewRa
 
 | | Moving | Idle |
 | --- | --- | --- |
-| Condition | not idle, `speed <= movingMaxSpeed` (0.30 blocks/tick: walking and sprinting, not flying or elytra), `movingEnabled` | no movement over 0.25 block for `idleStillTicks` (20 = 1 s) |
+| Condition | not idle, `speed <= movingMaxSpeed` (0.30 blocks/tick: walking and sprinting, not flying or elytra), `movingEnabled` | no movement over 0.25 block for `idleStillTicks` (20 = 1 s), checked every `movement.sampleTicks` (10) ticks |
 | Full generation | none | out to view + `idleExtraFull` (2) |
 | Terrain only | forward cone (`movingForwardAngleDegrees` half-angle, 60) out to view + `movingExtraTerrain` (3) | out to view + `idleExtraTerrain` (12; 0 = off) |
 | Tick limit | tick EMA and current tick under `movingMaxTickMs` (15) | under `maxTickMs` (20) |

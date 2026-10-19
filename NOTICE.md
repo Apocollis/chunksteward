@@ -4,6 +4,10 @@
 
 Chunk Steward (modid `chunksteward`, formerly Lazy Chunks) is a server-side performance mod for Minecraft 1.12.2 on CleanroomMC.
 
+## Licence
+
+Chunk Steward's code is released under the MIT licence, see [LICENSE](LICENSE). The logo is not covered by it: it is third-party artwork (credited below) and stays with its original artist.
+
 ## Credits
 
 - **Behaviour reference:** the adaptive throttle, idle preload, login warmup, save safety, emergency bypass and dimension filter are modeled on the behaviour of the Modrinth mod Lazy Chunk Load (MIT licence, https://modrinth.com/mod/lazy-chunk-load). No code from it is used.

@@ -16,15 +16,19 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Per-player horizontal speed and direction, updated at server tick END from position deltas (server-side motion
- * fields are not reliable for players). The direction is the view direction when nearly still and the travel
- * direction when moving fast, blended in between. When it turns past {@code resortAngleDegrees} the player's
+ * Per-player horizontal speed and direction, sampled at server tick END every {@code movement.sampleTicks} ticks from
+ * the position change since the last sample (server-side motion fields are not reliable for players); between samples
+ * the values are held, so they are at most one sample old. The direction is the view direction when nearly still and
+ * the travel direction when moving fast, blended in between. When it turns past {@code resortAngleDegrees} the player's
  * {@code PlayerChunkMap} is flagged to re-sort its missing chunks (vanilla only sorts on ticks divisible by 4).
  */
 @Mod.EventBusSubscriber
 public final class PlayerMotion {
-    private static final double VELOCITY_ALPHA = 0.5;
-    private static final double TELEPORT_SQ = 10.0 * 10.0;
+    /** Weight of the newest sample in the smoothed velocity. */
+    private static final double VELOCITY_ALPHA = 0.6;
+    /** A position change above this many blocks per elapsed tick (minimum {@link #TELEPORT_MIN}) is a teleport. */
+    private static final double TELEPORT_PER_TICK = 4.0;
+    private static final double TELEPORT_MIN = 10.0;
 
     static final class State {
         double lastX;
@@ -36,6 +40,8 @@ public final class PlayerMotion {
         double speed;
         double dirX;
         double dirZ = 1.0;
+        /** Ticks since the last sample; starts high so a new player is sampled on the first tick. */
+        int sinceSample = Integer.MAX_VALUE / 2;
         double sortDirX;
         double sortDirZ = 1.0;
     }
@@ -88,9 +94,17 @@ public final class PlayerMotion {
         ChunkStewardConfig.Ordering cfg = ChunkStewardConfig.ordering;
         boolean resort = cfg.enabled && cfg.directionPenalty > 0.0 && cfg.resortAngleDegrees > 0.0;
         double resortCos = Math.cos(Math.toRadians(cfg.resortAngleDegrees));
+        int sampleTicks = Math.max(1, ChunkStewardConfig.movement.sampleTicks);
         for (EntityPlayerMP player : server.getPlayerList().getPlayers()) {
             State state = STATES.computeIfAbsent(player.getUniqueID(), id -> new State());
-            update(player, state, cfg);
+            if (state.sinceSample < Integer.MAX_VALUE / 4) {
+                state.sinceSample++;
+            }
+            if (state.sinceSample < sampleTicks) {
+                continue;
+            }
+            update(player, state, cfg, Math.min(state.sinceSample, 4 * sampleTicks));
+            state.sinceSample = 0;
             if (resort && state.dirX * state.sortDirX + state.dirZ * state.sortDirZ < resortCos) {
                 state.sortDirX = state.dirX;
                 state.sortDirZ = state.dirZ;
@@ -100,18 +114,20 @@ public final class PlayerMotion {
         }
     }
 
-    private static void update(EntityPlayerMP player, State state, ChunkStewardConfig.Ordering cfg) {
+    /** One sample: {@code elapsed} ticks have passed since the previous one. Velocity is blocks per tick. */
+    private static void update(EntityPlayerMP player, State state, ChunkStewardConfig.Ordering cfg, int elapsed) {
         double dx = player.posX - state.lastX;
         double dz = player.posZ - state.lastZ;
         state.lastX = player.posX;
         state.lastZ = player.posZ;
-        if (player.dimension != state.lastDim || dx * dx + dz * dz > TELEPORT_SQ) {
+        double teleport = Math.max(TELEPORT_MIN, TELEPORT_PER_TICK * elapsed);
+        if (player.dimension != state.lastDim || dx * dx + dz * dz > teleport * teleport) {
             state.lastDim = player.dimension;
             state.velX = 0.0;
             state.velZ = 0.0;
         } else {
-            state.velX += VELOCITY_ALPHA * (dx - state.velX);
-            state.velZ += VELOCITY_ALPHA * (dz - state.velZ);
+            state.velX += VELOCITY_ALPHA * (dx / elapsed - state.velX);
+            state.velZ += VELOCITY_ALPHA * (dz / elapsed - state.velZ);
         }
         state.speed = Math.sqrt(state.velX * state.velX + state.velZ * state.velZ);
 

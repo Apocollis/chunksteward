@@ -12,7 +12,7 @@ Players are walked with `PlayerChunkMapEntry.hasPlayerMatching` and a predicate 
 
 ## Direction (`PlayerMotion`)
 
-Tracked at server tick END from position deltas (velocity EMA, alpha 0.5; a jump over 10 blocks or a dimension change resets it). Below `velocityMinSpeed` (0.35 b/t) the direction is the view yaw; at or above `velocityFullSpeed` (0.8) it is the travel direction; in between the two unit vectors are blended and normalised. So turning the head while walking reorders, and an elytra flight looking sideways still loads ahead of the flight path.
+Sampled at server tick END every `movement.sampleTicks` (10) ticks from the position change since the last sample (blocks per tick, smoothed with weight 0.6 for the newest sample); between samples the values are held, so they are at most half a second old. A jump over 4 blocks per elapsed tick (at least 10 blocks) or a dimension change resets the velocity. Below `velocityMinSpeed` (0.35 b/t) the direction is the view yaw; at or above `velocityFullSpeed` (0.8) it is the travel direction; in between the two unit vectors are blended and normalised. So turning the head while walking reorders, and an elytra flight looking sideways still loads ahead of the flight path.
 
 ## Re-sort on turning
 

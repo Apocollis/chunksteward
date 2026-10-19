@@ -7,6 +7,7 @@ import net.minecraftforge.common.config.Config;
 public class ChunkStewardConfig {
 
     public static Throttle throttle = new Throttle();
+    public static Movement movement = new Movement();
     public static Ordering ordering = new Ordering();
     public static Populate populate = new Populate();
     public static RandomTicks randomTicks = new RandomTicks();
@@ -32,8 +33,9 @@ public class ChunkStewardConfig {
 
         @Config.Comment({"Measured TPS (over about the last 5 seconds) at or above which the server counts as having room (load factor 1).",
                 "Slightly under 20 on purpose: a 100-tick mean of 50.3 ms reads 19.88 TPS, which should still count as full.",
-                "Reported only (status log, /chunksteward status, ChunkStewardAPI.getLoadFactor and isServerBehind); it",
-                "does not gate chunks. Measured TPS is min(20, 1000 / average tick work), so any average under 50 ms reads 20."})
+                "Reported (status log, /chunksteward status, ChunkStewardAPI.getLoadFactor and isServerBehind) and, with",
+                "admitAtFullTps, the point from which every chunk is admitted. Measured TPS is min(20, 1000 / average tick work),",
+                "so any average under 50 ms reads 20."})
         @Config.RangeDouble(min = 5.0, max = 20.0)
         public double tpsFull = 19.5;
 
@@ -73,6 +75,14 @@ public class ChunkStewardConfig {
         @Config.Comment("Pause throttled loading on the tick of a world save (autosave every 900 ticks, /save-all) and this many ticks after.")
         @Config.RangeInt(min = 0, max = 20)
         public int savePauseTicks = 1;
+    }
+
+    public static class Movement {
+        @Config.Comment({"Player movement (speed, direction, standing still) is measured from the position change over this many",
+                "ticks (20 = 1 s) instead of every tick. Cheaper to run; the emergency radius, chunk order and the idle",
+                "preload tier react up to this long after a change. 1 = every tick."})
+        @Config.RangeInt(min = 1, max = 40)
+        public int sampleTicks = 10;
     }
 
     public static class Ordering {

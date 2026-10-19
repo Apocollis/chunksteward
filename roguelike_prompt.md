@@ -86,6 +86,23 @@ The tower (stage 8 `TOWER`) is built about 2 minutes after the dungeon is queued
 2. Delay the visible stages (at least `TOWER`, plus anything above ground) until no player is within a chosen distance of the footprint (or the player is inside it), and keep those chunks from being resent mid-build if possible.
 3. Queue the dungeon earlier. Chunk Steward's preload does not populate beyond view distance, so a dungeon queued by population cannot start earlier unless Roguelike also triggers on a larger radius (for example a terrain-ready check). Say so if you need Chunk Steward to populate farther ahead; that is a Chunk Steward change the user must approve.
 
+## Policy change requested (2026-10-18, after the spark profile)
+A spark profile of the 21:22 to 21:29 run (server thread, 403 s) shows the dungeon is still timid even though the user accepts hitching:
+- Dungeon 2 (queued 21:24:38, done 21:26:24, 106 s): PREPARE_CHUNKS 47 s for 3.4 s of work, ENCASE 25 s for 1.0 s of work plus 1.0 s flush at an average slice of 1 ms, ROOMS 10.8 s, AFTER 7.8 s (held back 101 ticks).
+- During the build (about 21:25:30 to 21:26:20) the server thread was 90.6% busy and asleep 9.3% (about 4.6 ms per tick spare). Roguelike took 11.4% (about 5.7 ms per tick). Entity updates were 38%, Dynamic Stealth 22%, Depths Update 13%, chunk generation 3.5%.
+- Dungeon 1 ENCASE (21:23:09 to 21:23:28): 19 s for about 1.7 s of work plus flush, with 15% of the thread asleep.
+Because the spare time is small, a headroom-sized slice cannot make the dungeon fast. The user wants the dungeon to **overspend**.
+
+Required behaviour:
+1. While a dungeon job is running, spend a fixed per-tick cap (a config value, start around 40 to 45 ms of dungeon work per tick, so the tick may reach roughly 90 to 100 ms) regardless of `getHeadroomMs()`, `getRemainingTickBudgetMs`, `getLoadFactor()` and `isGeneratingChunks()`. Run steps until the cap is reached; steps are atomic, so the cap is soft and a long step (up to about 270 ms seen) may overrun it.
+2. Intermittent hitching is accepted. Do not pause on a single slow tick, on TPS between 20 and about 12, or because Chunk Steward is generating chunks.
+3. Pause (fall back to the headroom-based slice) only on a **sustained freeze**: for example `getMeasuredTps()` (100-tick mean) below about 10 for 10 consecutive seconds, or the dungeon's own measured tick time above a hard ceiling for several ticks in a row. Resume overspending after TPS is back above about 15 for about 5 seconds (hysteresis, so it does not flap).
+4. Keep a hard safety: never let one tick run longer than a config ceiling (start at 200 ms) from dungeon work alone. Clients drop after about 30 s without a keep-alive and a dedicated server's watchdog (`max-tick-time`, default 60 s) can kill the server, so the overspend must never hold the thread for seconds at a time.
+5. Make the cap, the sustained-freeze TPS and its duration, the resume TPS and the per-tick ceiling config values, and log the active mode (overspend or backed off) in the stage summaries so the next test can be read.
+6. Priorities between stages: PREPARE_CHUNKS and ENCASE hold most of the waiting; ENCASE reports an average slice of 1 ms, so check that the overspend also reaches the light drain and not only the build steps.
+
+Expected effect on Chunk Steward (so the next test is read correctly): while a dungeon overspends, measured TPS falls below 19.5, so Chunk Steward's full-TPS admission stops applying and player chunks go back to the headroom rule (`targetTickMs` 40), with the emergency radius still bypassing it. Slower player chunk loading during a dungeon build is therefore expected and accepted. No API change is needed for this: `getMeasuredTps()` and `getLoadFactor()` already give the smoothed signal.
+
 ## Constraints
 - Do not change Chunk Steward's API meanings; the Roguelike jar compiles against it only.
 - Keep the guard `Loader.isModLoaded("chunksteward")` and the holder-class pattern.
