@@ -85,6 +85,16 @@ tasks.register('verifyReleaseJar') {
             if (zip.getEntry("mixins.chunksteward.early.json") == null) {
                 throw new GradleException("mixins.chunksteward.early.json missing from remapped jar")
             }
+            if (zip.getEntry("mixins.chunksteward.rtg.json") == null) {
+                throw new GradleException("mixins.chunksteward.rtg.json missing from remapped jar")
+            }
+            if (zip.getEntry("com/apocollis/chunksteward/ChunkStewardLateMixinLoader.class") == null) {
+                throw new GradleException("ChunkStewardLateMixinLoader missing from remapped jar")
+            }
+            def refmapText = zip.getInputStream(zip.getEntry("mixins.chunksteward.refmap.json")).getText("UTF-8")
+            if (!refmapText.contains("MixinLatePopulatingChunk") || !refmapText.contains("func_185931_b")) {
+                throw new GradleException("refmap has no entry for the RTG doPopulate generator invoke (func_185931_b)")
+            }
             zip.entries().each { e ->
                 if (!e.name.endsWith(".class")) {
                     return

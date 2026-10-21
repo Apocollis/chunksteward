@@ -39,3 +39,7 @@ Unload/save while queued: only `(dimension, x, z)` is queued, never the `Chunk`.
 ## Extending
 
 Add a stage (or a policy inside `POPULATE`) with its own queue. The pattern is `DimQueue` and `PopulateQueue`: a position set per dimension, drained by budget, with only positions stored. Neighbour tracking belongs in StageGate next to the terrain-only set. Mixins keep calling `runNow` unchanged.
+
+## RTG-Plus windows
+
+`StageGate` keeps a small stack of RTG windows beside the populate depth frames (`rtgOuterAllow`, `rtgOuterExit`, `rtgMemberAllow`). The stack is cleared at tick start and on `SessionState.reset`, so a throw cannot leave it open. See [populate.md](populate.md#rtg-plus-latepopulatingchunk) for the rules.

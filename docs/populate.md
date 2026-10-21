@@ -33,3 +33,16 @@ Effect on players: a queued chunk is not `isPopulated`, so `PlayerChunkMapEntry.
 ## Limits
 
 One populate cannot be split: a single heavy structure (village, dungeon) still costs its whole tick. The budget only keeps several from landing in the same tick.
+
+## RTG-Plus (`LatePopulatingChunk`)
+
+RTG-Plus (the `RTG-1.12.2-9.x` builds) returns `rtg.world.gen.LatePopulatingChunk` from `ChunkGeneratorRTG.generateChunk`. That class overrides the outer `populate(IChunkProvider, IChunkGenerator)` and never calls the inner `populate(IChunkGenerator)` that `MixinChunk` gates, so without extra hooks an RTG overworld chunk skipped the budget, the queue, cascade deferral, terrain-only preload and the populate metrics. RTG's pass loads or populates a 5x5 window (offsets -2 to 2) around the loaded chunk from a static `populate(Chunk, IChunkGenerator)` and keeps its own `waitingChunks` stack for populates that start inside another one.
+
+`mixin/rtg/MixinLatePopulatingChunk` (loaded from `mixins.chunksteward.rtg.json` by `ChunkStewardLateMixinLoader`, only when RTG-Plus is present) applies the same gate:
+
+- **Outer method** (`func_186030_a`): one decision for the chunk vanilla asked for, through `StageGate.populateNow`. A deferred chunk cancels the whole pass (it is queued, or it is a terrain-only preload chunk). A chunk within `populate.protectRadius + 1` of a player is admitted anyway, since the chunks the pass would populate lie within one chunk of it. An admitted chunk opens an RTG window.
+- **Re-entrant outer call** (a load or cascade inside the window): cancelled, so a 5x5 pass never nests (RTG throws past a depth of 100). If it happened inside a populate it is queued as a cascade chunk.
+- **Static `populate`**: chunks already terrain-populated are cancelled (RTG's own body does nothing for them). The window owner runs. Every other chunk gets its own decision with the normal rules (terrain-only, ticket-exempt, already queued, near a player, cascade, budget, queue full); the queue-drain and stage 2 passes belong to the one chunk they asked for and are not applied to the others. A deferred chunk is cancelled before RTG pushes it on `waitingChunks`.
+- **`doPopulate`**: generator-populate timing for the status log.
+
+The terrain-populated flag needs no extra write: `Chunk.checkLight()` sets it, and `doPopulate` calls that first. Status log: `rtg windows N (nested cancelled M)` after the populate counters, shown only when RTG-Plus chunks populated. Older RTG (7.x) keeps vanilla chunks and the existing hook; no config key.

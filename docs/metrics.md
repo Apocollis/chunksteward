@@ -14,3 +14,7 @@ Line 2 (`GenMetrics`): `stages: terrain X ms/N, populate X ms/N (world generator
 - Server thread only (the thread that runs `MinecraftServer.tick`). Client-side `checkLight` in single player is ignored.
 - **Cascades:** a chunk generated while a populate is running, charged to the innermost running `IWorldGenerator` class: `cascades by generator: class N, ...` (top 3).
 - **Wait:** time from `PlayerChunkMapEntry` construction to the first `providePlayerChunk` that returns true in `PlayerChunkMap.tick`. Entries whose chunk arrives through Forge's async disk load callback are not sampled. Entries are kept in a `WeakHashMap`, so removed entries are not retained.
+
+## RTG-Plus
+
+When RTG-Plus chunks populate, the populate line ends with `rtg windows N (nested cancelled M)`: N outer passes admitted, M re-entrant passes cancelled. Before RTG-Plus support the populate stage showed `0.0 ms/0` on RTG terrain. The generator-populate split (generator populate / structures / world generators / other) works as for vanilla chunks.

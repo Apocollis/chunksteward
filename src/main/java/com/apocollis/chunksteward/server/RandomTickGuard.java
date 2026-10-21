@@ -3,7 +3,6 @@ package com.apocollis.chunksteward.server;
 import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.EmptyChunk;
 import net.minecraft.world.gen.ChunkProviderServer;
 
 import java.util.HashMap;
@@ -13,7 +12,7 @@ import java.util.stream.Collectors;
 
 /**
  * While {@code WorldServer.updateBlocks} runs its random block ticks, a request for a chunk that is not loaded gets an
- * {@link EmptyChunk} instead of generating it: reads see air and writes are dropped. Lava and fire ticks, grass spread
+ * {@link StewardEmptyChunk} instead of generating it: reads see air and writes are dropped. Lava and fire ticks, grass spread
  * and the like reach a few blocks past their own chunk; in 1.12 that used to generate the neighbour synchronously,
  * beyond the view distance, and kept pushing the generated area outward. Only the random-tick window is affected.
  */
@@ -62,7 +61,7 @@ public final class RandomTickGuard {
             }
             count[0]++;
         }
-        return new EmptyChunk(provider.world, x, z);
+        return new StewardEmptyChunk(provider.world, x, z);
     }
 
     /** First calling class that is not world or server plumbing: normally the block that is being ticked. */

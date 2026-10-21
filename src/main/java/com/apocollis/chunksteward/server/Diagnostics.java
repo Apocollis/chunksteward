@@ -11,7 +11,6 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.EmptyChunk;
 import net.minecraft.world.gen.ChunkProviderServer;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.Mod;
@@ -27,7 +26,7 @@ import java.util.TreeMap;
  * Temporary diagnostics, switched by {@code logging.debug} (off by default). Every line starts with {@code dbg} so
  * {@code grep dbg latest.log} finds them. Two cheap checks run even with debug off, because they would mean a bug: the
  * random-tick guard still active while player chunks are being provided, and a player chunk map entry holding an
- * {@link EmptyChunk}. Both warn at most once per 10 seconds.
+ * {@link StewardEmptyChunk}. Both warn at most once per 10 seconds.
  *
  * <p>With debug on:
  * <ul>
@@ -144,8 +143,8 @@ public final class Diagnostics {
         if (RandomTickGuard.isActive()) {
             warn("the random-tick guard is ACTIVE while player chunks are provided; it would hand out empty chunks");
         }
-        if (provided && entry.getChunk() instanceof EmptyChunk) {
-            warn("a player chunk map entry for chunk " + entry.getPos() + " holds an EmptyChunk (it will never load)");
+        if (provided && entry.getChunk() instanceof StewardEmptyChunk) {
+            warn("a player chunk map entry for chunk " + entry.getPos() + " holds a StewardEmptyChunk from the random-tick guard (it will never load)");
         }
     }
 

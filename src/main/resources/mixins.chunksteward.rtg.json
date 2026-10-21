@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "injectors": {"defaultRequire": 1},
+  "minVersion": "0.8",
+  "refmap": "mixins.chunksteward.refmap.json",
+  "package": "com.apocollis.chunksteward.mixin.rtg",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "MixinLatePopulatingChunk"
+  ]
+}

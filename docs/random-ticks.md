@@ -4,7 +4,7 @@
 
 ## What the guard does
 
-`MixinWorldServer` sets a flag at `updateBlocks` HEAD and clears it at RETURN (inject only, so it cannot clash with other mods that wrap the `randomTick` call). `MixinChunkProviderServer` asks `RandomTickGuard.intercept` at `provideChunk` HEAD. While the flag is set and the chunk is not in `loadedChunks` (dimension not excluded), it returns an `EmptyChunk` for that position: reads see air, writes are dropped, no chunk is generated. Everything outside the random-tick window, and every loaded chunk, is unchanged.
+`MixinWorldServer` sets a flag at `updateBlocks` HEAD and clears it at RETURN (inject only, so it cannot clash with other mods that wrap the `randomTick` call). `MixinChunkProviderServer` asks `RandomTickGuard.intercept` at `provideChunk` HEAD. While the flag is set and the chunk is not in `loadedChunks` (dimension not excluded), it returns an `StewardEmptyChunk (Chunk Steward's own empty chunk: vanilla `EmptyChunk` is client-only and does not exist on a dedicated server)` for that position: reads see air, writes are dropped, no chunk is generated. Everything outside the random-tick window, and every loaded chunk, is unchanged.
 
 ## Effect
 

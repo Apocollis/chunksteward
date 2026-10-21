@@ -75,6 +75,13 @@ public final class StageGate {
     private static int populatesThisTick;
     private static int lastPopulateTick = Integer.MIN_VALUE / 2;
 
+    // RTG-Plus LatePopulatingChunk: its outer populate runs a 5x5 pass over the chunks around the loaded one. The chunk
+    // that was loaded owns the window; chunks that RTG loads or generates inside it are cancelled or queued.
+    private static final Chunk[] RTG_WINDOWS = new Chunk[8];
+    private static int rtgDepth;
+    private static long statRtgWindows;
+    private static long statRtgNestedCancelled;
+
     private static long statPopulateDeferred;
     private static long statPopulateCascadeDeferred;
     private static long statPopulateTicketExempt;
@@ -137,6 +144,15 @@ public final class StageGate {
     }
 
     private static boolean populateDecision(Chunk chunk) {
+        return populateDecision(chunk, false);
+    }
+
+    /**
+     * {@code member}: a chunk inside an RTG window that is not the window owner. The drain and stage 2 passes are
+     * for the one chunk they asked for, so they are skipped here; everything else applies, including the near-player
+     * pass (an eligible member is exactly a chunk vanilla would populate, one decision per chunk).
+     */
+    private static boolean populateDecision(Chunk chunk, boolean member) {
         World world = chunk.getWorld();
         int dim = world.provider.getDimension();
         long key = ChunkPos.asLong(chunk.x, chunk.z);
@@ -152,7 +168,7 @@ public final class StageGate {
                 || !Dimensions.applies(dim)) {
             return ret("pass: disabled, client, other thread or excluded dimension", true);
         }
-        if (populateDepth == 0 && (PopulateQueue.isDraining() || stage2Active)) {
+        if (!member && populateDepth == 0 && (PopulateQueue.isDraining() || stage2Active)) {
             return ret("pass: queue drain or stage 2", true);
         }
         if (populateDepth == 0 && ticketExempt(world, chunk.x, chunk.z)) {
@@ -250,6 +266,92 @@ public final class StageGate {
         populateDepth--;
     }
 
+    // ---- RTG-Plus LatePopulatingChunk ------------------------------------------------------------------------------
+
+    private static final String TERRAIN_ONLY_CODE = "preload terrain-only chunk";
+
+    private static boolean rtgApplies(Chunk chunk) {
+        World world = chunk.getWorld();
+        return ChunkStewardConfig.populate.enabled && !world.isRemote
+                && Thread.currentThread() == TickMonitor.serverThread && Dimensions.applies(world.provider.getDimension());
+    }
+
+    /**
+     * Head of RTG's outer {@code populate(IChunkProvider, IChunkGenerator)}: true lets RTG run its pass for this chunk
+     * (and opens a window), false cancels it. One decision per chunk vanilla asked for.
+     */
+    public static boolean rtgOuterAllow(Chunk chunk) {
+        if (!rtgApplies(chunk)) {
+            return true;
+        }
+        World world = chunk.getWorld();
+        int dim = world.provider.getDimension();
+        long key = ChunkPos.asLong(chunk.x, chunk.z);
+        if (rtgDepth > 0) {
+            // A load or cascade re-entered the outer method inside a window: never nest another 5x5 pass.
+            statRtgNestedCancelled++;
+            if (populateDepth > 0 && !chunk.isTerrainPopulated() && !PopulateQueue.contains(dim, key)
+                    && PopulateQueue.enqueue(dim, key)) {
+                statPopulateCascadeDeferred++;
+            }
+            return false;
+        }
+        boolean run = populateNow(chunk);
+        if (!run && !TERRAIN_ONLY_CODE.equals(populateCode)
+                && PopulateQueue.nearPlayer(world, chunk.x, chunk.z, ChunkStewardConfig.populate.protectRadius + 1)) {
+            // The chunks this pass would populate lie within one chunk of it: a player next to them must not wait.
+            PopulateQueue.remove(dim, key);
+            run = true;
+        }
+        if (!run) {
+            return false;
+        }
+        if (rtgDepth < RTG_WINDOWS.length) {
+            RTG_WINDOWS[rtgDepth] = chunk;
+        }
+        rtgDepth++;
+        statRtgWindows++;
+        return true;
+    }
+
+    /** RETURN of RTG's outer populate. A cancelled head never opened a window, so a mismatch is ignored. */
+    public static void rtgOuterExit(Chunk chunk) {
+        if (rtgDepth == 0 || Thread.currentThread() != TickMonitor.serverThread) {
+            return;
+        }
+        int top = rtgDepth - 1;
+        if (top < RTG_WINDOWS.length) {
+            if (RTG_WINDOWS[top] != chunk) {
+                return;
+            }
+            RTG_WINDOWS[top] = null;
+        }
+        rtgDepth--;
+    }
+
+    /** Head of RTG's static {@code populate(Chunk, IChunkGenerator)}, for a chunk that is not populated yet. */
+    public static boolean rtgMemberAllow(Chunk chunk) {
+        if (!rtgApplies(chunk)) {
+            return true;
+        }
+        if (rtgDepth == 0) {
+            return populateNow(chunk);
+        }
+        int top = rtgDepth - 1;
+        boolean owner = top < RTG_WINDOWS.length && RTG_WINDOWS[top] == chunk;
+        boolean run;
+        if (owner) {
+            populateCode = "rtg window owner";
+            run = true;
+        } else {
+            run = populateDecision(chunk, true);
+        }
+        if (ChunkStewardConfig.logging.debug) {
+            Diagnostics.populate(populateCode, run, chunk);
+        }
+        return run;
+    }
+
     /** A chunk's terrain is being generated. Inside a populate that is a cascade; the chunk is released later. */
     public static void onGenerate(int dim, int x, int z) {
         GeneratedCache.add(dim, x, z);
@@ -279,6 +381,8 @@ public final class StageGate {
     static void reset() {
         populateDepth = 0;
         java.util.Arrays.fill(FRAMES, null);
+        rtgDepth = 0;
+        java.util.Arrays.fill(RTG_WINDOWS, null);
         populatesThisTick = 0;
         lastPopulateTick = Integer.MIN_VALUE / 2;
         preloading = false;
@@ -307,6 +411,8 @@ public final class StageGate {
         stage2Active = false;
         populateDepth = 0;
         java.util.Arrays.fill(FRAMES, null);
+        rtgDepth = 0;
+        java.util.Arrays.fill(RTG_WINDOWS, null);
         populatesThisTick = 0;
     }
 
@@ -478,11 +584,14 @@ public final class StageGate {
     static String reportAndReset() {
         String s = "populate deferred " + statPopulateDeferred + " (cascade " + statPopulateCascadeDeferred
                 + "), resumed " + statPopulateResumed + ", ticket-exempt " + statPopulateTicketExempt
+                + (statRtgWindows + statRtgNestedCancelled > 0
+                        ? ", rtg windows " + statRtgWindows + " (nested cancelled " + statRtgNestedCancelled + ")" : "")
                 + ", mod-ticket generation " + statBusyIgnored + ", cascades " + statCascades + ", "
                 + PopulateQueue.reportAndReset() + "; light deferred " + statLightDeferred + ", drained "
                 + statLightDrained + ", queued " + lightQueued + "; held " + ChunkHolds.heldCount();
         statPopulateDeferred = statPopulateCascadeDeferred = statPopulateResumed = statCascades = 0L;
         statPopulateTicketExempt = statBusyIgnored = 0L;
+        statRtgWindows = statRtgNestedCancelled = 0L;
         statLightDeferred = statLightDrained = 0L;
         return s;
     }
