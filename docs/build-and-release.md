@@ -6,3 +6,16 @@
 - Optional late mixin: `mixins.chunksteward.rtg.json` (package `mixin.rtg`, `required: false`) is queued by `ChunkStewardLateMixinLoader` only when RTG-Plus is installed; `verifyReleaseJar` checks the json, the loader class and the refmap entry for the `doPopulate` generator invoke.
 - Licence: MIT, `LICENSE` in the repo root.
 - Version lives in `build.gradle` (`version`) and `ChunkSteward.VERSION`.
+
+## Agent / development workflow
+
+1. **Investigate read-only first:** Never edit code, configs, or build files without prior approval.
+2. **Plan:** Present an implementation plan under `/.plans/YYYYMMDD-HHmm-<kebab-task>.md` (never repo-root `implementation_plan.md`) covering the goal, proposed file changes, risks/decisions, and verification steps.
+3. **Wait for approval:** STOP and wait for explicit `proceed` before making changes.
+4. **Implement & verify:** Implement approved changes and run verification tests / `.\build_gradle.ps1`.
+5. **Plan Archive Policy (never delete):**
+   - When a plan in `/.plans/YYYYMMDD-HHmm-<task>.md` is completed, superseded, or resolved (including issues resolved via config or alternative workarounds), **DO NOT delete the plan file**.
+   - Instead, update the file's header status (e.g., `**Status:** Completed (YYYY-MM-DD)` or `**Status:** Archived (Resolved via config/superseded...)`) with a brief resolution summary.
+   - Move the file to `/.plans/archive/`.
+   - The root `/.plans/` folder must contain only active, in-progress work, keeping the backlog clear while permanently preserving historical investigations, design alternatives, and negative knowledge in `/.plans/archive/`.
+
