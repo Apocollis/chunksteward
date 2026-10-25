@@ -9,15 +9,15 @@
 | `getNonChunkTickMs()` | the same, excluding chunk provision (what entities, mods and everything else cost) |
 | `getHeadroomMs()` | spare ms per tick on average: what is left of a 50 ms tick after the average, times `getLoadFactor()`, never below 0 |
 | `getMeasuredTps()` (v2) | measured TPS over about 5 s: `min(20, 1000 / mean tick work)` |
-| `getLoadFactor()` (v2) | 1.0 when measured TPS is at or above `throttle.tpsFull` (19.5: the server has room), 0.0 at `throttle.tpsLoaded` (15: under load), linear in between. Scale optional work by it |
+| `getLoadFactor()` (v2) | 1.0 when measured TPS is at or above `throttle.tpsFull` (19.0: the server has room), 0.0 at `throttle.tpsLoaded` (15: under load), linear in between. Scale optional work by it |
 | `getRemainingTickBudgetMs(double targetMs)` | `targetMs` minus the time the current tick has used so far, never below 0; returns `targetMs` off the server thread or before the first measurement. For in-tick decisions |
-| `isServerBehind()` | measured TPS is below `throttle.tpsFull` (19.5): the server is not holding a full 20 TPS |
+| `isServerBehind()` | measured TPS is below `throttle.tpsFull` (19.0): the server is not holding a full 20 TPS |
 | `isGeneratingChunks()` | chunks are being generated for players at the rate where preload holds off (`preload.busyChunks` in `preload.busyWindowTicks`); a good moment to pause optional work. Chunks a mod in `preload.busyIgnoreMods` (default `roguelike`) generates on its own Forge ticket are not counted, so a dungeon build does not see its own footprint loading as player demand |
 | `getPopulateQueueSize()` | chunks whose populate is queued behind the tick budget |
 
 `getHeadroomMs()` is the 20-tick average headroom scaled by the load factor: spare time per tick on average, not a per-tick guarantee.
 
-**Treat a load factor of 0.9 or more as full.** `throttle.tpsFull` defaults to 19.5, so any measured TPS of 19.5 or higher reads 1.0, but a test of exactly `== 1.0` still flips on a brief overrun (a 100-tick mean of 50.3 ms is 19.88 TPS). At load factor 1 the server has room: spend up to `getHeadroomMs()` each tick and do not pause for chunk generation alone. Scale back, or pause, only when the load factor stays low.
+**Treat a load factor of 0.9 or more as full.** `throttle.tpsFull` defaults to 19.0, so any measured TPS of 19.0 or higher reads 1.0, but a test of exactly `== 1.0` still flips on a brief overrun (a 100-tick mean of 50.3 ms is 19.88 TPS). At load factor 1 the server has room: spend up to `getHeadroomMs()` each tick and do not pause for chunk generation alone. Scale back, or pause, only when the load factor stays low.
 
 Call it on the server thread. The averages lag by about 20 ticks: use them for pacing (how much to attempt per tick), not for exact decisions about the current tick.
 

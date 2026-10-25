@@ -45,7 +45,7 @@ public final class ChunkStewardAPI {
     }
 
     /**
-     * 1.0 when the server has room (measured TPS at {@code throttle.tpsFull}, default 20), 0.0 when it is under load
+     * 1.0 when the server has room (measured TPS at {@code throttle.tpsFull}, default 19), 0.0 when it is under load
      * (at or below {@code throttle.tpsLoaded}, default 15), linear in between. Scale optional work by this. (Version 2.)
      */
     public static double getLoadFactor() {

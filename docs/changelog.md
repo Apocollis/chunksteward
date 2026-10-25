@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0
+- First release. Version 1.0 (`build.gradle`, `ChunkSteward.VERSION`); behaviour as tested in 0.3 apart from the defaults below. `ChunkStewardAPI` is unchanged (still version 2).
+- `throttle.tpsFull` default 19.0 (was 19.5): chunks are admitted freely while measured TPS stays at 19 or above (a 100-tick mean up to about 52.6 ms), so generation keeps up while the server is only slightly behind. Load factor 1 and `isServerBehind()` false from 19.0; `throttle.tpsLoaded` stays 15, so API consumers see the load factor reach 0 at the same point as before. An existing cfg keeps its old value; set `tpsFull=19.0` by hand to pick this up.
+- Stage 2 is faster: `stage2.maxTickMs` default 30 (was 20) and `stage2.maxPerMinute` 240 (was 120). With 20 the limit sat at the server's baseline tick (20 to 22 ms) and stage 2 managed about 1.2 chunks a second; 30 / 240 were set in the DEVBOX and server cfgs from 2026-10-20 before becoming the defaults. Existing cfgs keep their values.
+
 ## 0.3
 - Renamed from Lazy Chunks 1.12 to **Chunk Steward**: modid `lazychunks` → `chunksteward`, package `com.apocollis.chunksteward`, config `config/chunksteward.cfg` (same keys; copy `lazychunks.cfg` over), jar `ChunkSteward-<version>.jar`, mixin config `mixins.chunksteward.early.json`. New logo (credits in `NOTICE.md` and `mcmod.info`). The deploy script now also deletes `LazyChunks-*.jar`, since the old and new jars must never both load. Existing worlds log a one-time "saved with mod lazychunks which appears to be missing" notice, which is harmless.
 - Populate budgeting: a populate that would push the current tick past `populate.tickBudgetMs` (30) is queued and run later, nearest and most-forward first; chunks near players, and players in login warmup, populate at once. Fixes the multi-second stalls of 0.2 test logs, which were populate bursts of chunks loaded from disk (including terrain-only preload chunks), not terrain generation. See `docs/populate.md`.

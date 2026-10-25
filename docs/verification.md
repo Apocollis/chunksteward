@@ -1,5 +1,15 @@
 # Verification
 
+## 1.0
+
+| Check | How | Status |
+| --- | --- | --- |
+| Build, class major 65, refmap present, version match (`ChunkSteward-1.0.jar`) | `.\gradlew.bat build` (`verifyReleaseJar`) | passed: 2026-10-23 (manifest and `mcmod.info` 1.0, class major 65) |
+| No client-only classes in the jar | scan the jar for `net/minecraft/client` and `EmptyChunk` (only `StewardEmptyChunk` allowed) | passed: 2026-10-23, no `net/minecraft/client` entries, only `StewardEmptyChunk` |
+| `tpsFull` 19.0 | `/chunksteward status` shows `19.0 / 15`; load factor 1.0 while TPS is 19 or above; chunks admitted freely down to 19 TPS, headroom rule below | not run |
+| Stage 2 defaults 30 ms / 240 per minute | fresh cfg has `maxTickMs=30.0`, `maxPerMinute=240`; near a hotspot TPS stays 20 and `yielded ... tick over limit` is rare | values in the DEVBOX and server cfgs since 2026-10-20 (0.3); judging log not recorded; shipped-default check not run |
+| Single jar in `mods/` | after deploy, only `ChunkSteward-1.0.jar` in the DEVBOX mods folder | passed: deployed 2026-10-23, only `ChunkSteward-1.0.jar` in the DEVBOX and repo `mods/` folders; DEVBOX cfg `tpsFull` set to 19.0 (stage 2 already 30 / 240) |
+
 ## 0.3
 
 ### Core (rename, populate budgeting, cascades, random ticks, preload, ticket exemption)
