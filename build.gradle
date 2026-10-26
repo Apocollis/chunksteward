@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.apocollis.chunksteward'
-version = '1.0'
+version = '1.1'
 base {
     archivesName.set('ChunkSteward')
 }
@@ -38,6 +38,15 @@ repositories {
     flatDir {
         dirs 'libs'
     }
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }
 
 jar {

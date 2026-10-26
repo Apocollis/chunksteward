@@ -26,6 +26,11 @@ public abstract class MixinChunkProviderServer {
 
     @Inject(method = "provideChunk(II)Lnet/minecraft/world/chunk/Chunk;", at = @At("HEAD"), cancellable = true)
     private void chunksteward$randomTickGuard(int x, int z, CallbackInfoReturnable<Chunk> cir) {
+        // Outside updateBlocks this is one boolean read. intercept is too large to inline, and lighting calls
+        // provideChunk once per light read.
+        if (!RandomTickGuard.isActive()) {
+            return;
+        }
         Chunk empty = RandomTickGuard.intercept((ChunkProviderServer) (Object) this, x, z);
         if (empty != null) {
             cir.setReturnValue(empty);

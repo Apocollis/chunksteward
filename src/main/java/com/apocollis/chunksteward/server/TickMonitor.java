@@ -72,6 +72,7 @@ public final class TickMonitor {
         chunkNanos = 0L;
         generatedThisTick = 0;
         externalGenThisTick = 0;
+        ChunkThrottle.onTickStart();
     }
 
     public static void onTickEnd() {
@@ -96,13 +97,14 @@ public final class TickMonitor {
             lastLogNanos = now;
             ChunkSteward.LOGGER.info("status: tick avg {} ms (non-chunk {} ms, chunk {} ms), chunks generated {}, "
                             + "deferred {}, bypassed {} (max emergency radius {}), waiting {}, preloaded {} "
-                            + "(+{} terrain-only); {}; {}; {}; {}; TPS {} (load factor {})",
+                            + "(+{} terrain-only); {}; {}; {}; {}; TPS {} (load factor {}, admission factor {})",
                     String.format("%.1f", totalEmaMs), String.format("%.1f", otherEmaMs),
                     String.format("%.1f", chunkEmaMs), statGenerated, statSkipped, statBypassed,
                     statMaxEmergencyRadius, waitingNow(), statPreloaded, statPreloadedTerrainOnly,
                     StageGate.reportAndReset(), IdlePreload.reportAndReset(), Stage2Pregen.reportAndReset(),
                     RandomTickGuard.reportAndReset(), String.format("%.2f", measuredTps()),
-                    String.format("%.2f", loadFactor()));
+                    String.format("%.2f", loadFactor()),
+                    String.format("%.2f", ChunkThrottle.admissionFactor()));
             ChunkSteward.LOGGER.info("status: {}", GenMetrics.reportAndReset());
             statGenerated = statSkipped = statBypassed = statPreloaded = statPreloadedTerrainOnly = 0L;
             statMaxEmergencyRadius = 0;

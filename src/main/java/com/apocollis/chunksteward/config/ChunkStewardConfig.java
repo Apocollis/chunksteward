@@ -21,10 +21,9 @@ public class ChunkStewardConfig {
         @Config.Comment("Master switch for the adaptive chunk throttle.")
         public boolean enabled = true;
 
-        @Config.Comment({"While the server holds 20 TPS (measured TPS at tpsFull, or the average tick work of about the last 20",
-                "ticks under 50 ms), admit every chunk, however long the current tick already is; vanilla still stops",
-                "after 50 ms per tick. Below 20 TPS, targetTickMs applies. false = only the targetTickMs headroom rule",
-                "(the behaviour before 0.3's pacing API)."})
+        @Config.Comment({"While measured TPS is at or above tpsFull, admit every chunk; vanilla still stops 50 ms after a",
+                "success. Below tpsFull the headroom rule applies, widened by headroomBoostMs as TPS falls toward",
+                "tpsClamp. false = only the fixed targetTickMs headroom, with no boost."})
         public boolean admitAtFullTps = true;
 
         @Config.Comment("Target server tick work in ms. Chunk generation only gets the headroom left under this.")
@@ -43,6 +42,17 @@ public class ChunkStewardConfig {
         @Config.Comment("Measured TPS at or below which the server counts as under load (load factor 0). Reported only, see tpsFull.")
         @Config.RangeDouble(min = 1.0, max = 19.9)
         public double tpsLoaded = 15.0;
+
+        @Config.Comment({"Measured TPS at or below which the headroom boost is zero and the targetTickMs rule applies on its own.",
+                "Between here and tpsFull the boost scales with the admission factor. A value that is not at least 0.1",
+                "below tpsFull is treated as tpsFull - 0.1."})
+        @Config.RangeDouble(min = 1.0, max = 18.9)
+        public double tpsClamp = 10.0;
+
+        @Config.Comment({"Extra milliseconds of chunk time per tick at admission factor 1 (just below tpsFull), added to",
+                "targetTickMs - non-chunk work. 0 restores the 1.0 cliff below tpsFull. Ignored when admitAtFullTps is false."})
+        @Config.RangeDouble(min = 0.0, max = 200.0)
+        public double headroomBoostMs = 60.0;
 
         @Config.Comment("When the average non-chunk tick work is below this many ms the server is idle and chunks load at full vanilla speed.")
         @Config.RangeDouble(min = 0.0, max = 50.0)

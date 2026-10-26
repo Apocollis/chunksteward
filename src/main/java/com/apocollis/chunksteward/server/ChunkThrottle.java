@@ -13,8 +13,9 @@ import net.minecraft.util.math.ChunkPos;
  */
 public final class ChunkThrottle {
     private static final double INITIAL_COST_MS = 10.0;
-    private static final double FULL_TICK_MS = 50.0;
     private static double genCostEmaMs = INITIAL_COST_MS;
+    /** Smoothed 0 at {@code tpsClamp}, 1 at {@code tpsFull}. Widens the headroom below full TPS. Not the API load factor. */
+    private static double admissionFactor = 1.0;
 
 
     private static int emergencyX;
@@ -38,8 +39,23 @@ public final class ChunkThrottle {
 
     static void reset() {
         genCostEmaMs = INITIAL_COST_MS;
+        admissionFactor = 1.0;
         emergencyX = 0;
         emergencyZ = 0;
+    }
+
+    static double admissionFactor() {
+        return admissionFactor;
+    }
+
+    /**
+     * One step of the admission factor, from {@link TickMonitor#onTickStart}. {@code withinBudget} runs once per missing
+     * chunk, so the smooth must not live there.
+     */
+    static void onTickStart() {
+        ChunkStewardConfig.Throttle cfg = ChunkStewardConfig.throttle;
+        double raw = AdmissionFactor.raw(TickMonitor.measuredTps(), cfg.tpsFull, cfg.tpsClamp);
+        admissionFactor = AdmissionFactor.smooth(admissionFactor, raw);
     }
 
     public static boolean provide(PlayerChunkMap map, PlayerChunkMapEntry entry, boolean canGenerate) {
@@ -105,28 +121,25 @@ public final class ChunkThrottle {
     }
 
     /**
-     * Per-tick headroom admission (the behaviour before the pacing API): below {@code idleTickMs} of non-chunk work the
-     * server is idle and chunks load at vanilla speed; otherwise a chunk may generate while this tick's chunk time plus
-     * the average cost of one chunk stays within {@code targetTickMs - non-chunk work}. The starvation guard admits one
-     * chunk every {@code maxStarveTicks} even when the server is busy. Measured TPS and the load factor are only reported
-     * (status log, {@code ChunkStewardAPI}); they do not gate chunks.
-     *
-     * <p>Before that, with {@code admitAtFullTps}: while the server holds 20 TPS (measured TPS at {@code tpsFull}, or the
-     * whole-tick average of about 20 ticks under 50 ms) every chunk is admitted, however long the current tick already
-     * is; vanilla's own loop still stops 50 ms after a success. If chunk work pushes the average past 50 ms, TPS drops
-     * below 20 and the headroom rule takes over. In this pack one chunk costs 25 to 50 ms, more than the headroom under
-     * {@code targetTickMs}, so the headroom rule alone held chunks to the starvation rate (5 a second) at 20 TPS.
+     * Per-tick headroom admission. Below {@code idleTickMs} of non-chunk work the server is idle and chunks load at
+     * vanilla speed. With {@code admitAtFullTps}, measured TPS at or above {@code tpsFull} admits every chunk; vanilla's
+     * own loop still stops 50 ms after a success. Below that, a chunk may generate while this tick's chunk time plus the
+     * average cost of one chunk stays within {@code targetTickMs - non-chunk work}, plus {@code headroomBoostMs} scaled
+     * by the admission factor (1 just under {@code tpsFull}, 0 at {@code tpsClamp}). The starvation guard admits one
+     * chunk every {@code maxStarveTicks} even when that allowance says no. {@code admitAtFullTps = false} is the fixed
+     * headroom with no boost. The API load factor does not gate chunks.
      */
     private static boolean withinBudget() {
         ChunkStewardConfig.Throttle cfg = ChunkStewardConfig.throttle;
         if (!TickMonitor.primed || TickMonitor.otherEmaMs < cfg.idleTickMs) {
             return true;
         }
-        if (cfg.admitAtFullTps
-                && (TickMonitor.measuredTps() >= cfg.tpsFull || TickMonitor.totalEmaMs < FULL_TICK_MS)) {
+        if (cfg.admitAtFullTps && TickMonitor.measuredTps() >= cfg.tpsFull) {
             return true;
         }
-        double allowanceMs = cfg.targetTickMs - TickMonitor.otherEmaMs;
+        double allowanceMs = AdmissionFactor.allowance(cfg.targetTickMs, TickMonitor.otherEmaMs,
+                cfg.admitAtFullTps ? admissionFactor : 0.0,
+                cfg.admitAtFullTps ? cfg.headroomBoostMs : 0.0);
         double usedMs = TickMonitor.chunkNanos / 1.0e6;
         if (usedMs + genCostEmaMs <= allowanceMs) {
             return true;

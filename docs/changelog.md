@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1
+- Below `throttle.tpsFull` (19), the headroom allowance gains `headroomBoostMs` (60) scaled by an admission factor: 1 at 19 TPS, 0 at `tpsClamp` (10). At 19 and above every chunk is still admitted, and vanilla's loop still stops 50 ms after a success. The shortcut that also admitted everything when the 20-tick average was under 50 ms is gone. `getLoadFactor` and `getHeadroomMs` are unchanged. See `docs/throttle.md`.
+- Random-tick guard: `provideChunk` returns on a single flag check when no random tick is in progress, so lighting no longer calls `RandomTickGuard.intercept` on every light read. During `WorldServer.updateBlocks` an unloaded chunk still gets an empty chunk. See `docs/random-ticks.md`.
+
 ## 1.0
 - First release. Version 1.0 (`build.gradle`, `ChunkSteward.VERSION`); behaviour as tested in 0.3 apart from the defaults below. `ChunkStewardAPI` is unchanged (still version 2).
 - `throttle.tpsFull` default 19.0 (was 19.5): chunks are admitted freely while measured TPS stays at 19 or above (a 100-tick mean up to about 52.6 ms), so generation keeps up while the server is only slightly behind. Load factor 1 and `isServerBehind()` false from 19.0; `throttle.tpsLoaded` stays 15, so API consumers see the load factor reach 0 at the same point as before. An existing cfg keeps its old value; set `tpsFull=19.0` by hand to pick this up.

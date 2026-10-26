@@ -1,5 +1,14 @@
 # Verification
 
+## 1.1
+
+| Check | How | Status |
+| --- | --- | --- |
+| Build, class major 65, refmap present, version match (`ChunkSteward-1.1.jar`) | `.\gradlew.bat build` (`verifyReleaseJar`) | passed: 2026-10-25. Not copied to DEVBOX or the server |
+| Random-tick guard early exit | A second Flare capture of the same route | dropped 2026-10-25: the same route cannot be repeated closely enough to compare. The 2026-10-24 capture (4.9 s in `chunksteward$randomTickGuard`) stays the reason for the change. While the flag is clear the handler returns before `intercept`; while it is set, the loaded-chunk check and the empty chunk are unchanged |
+| Admission factor math | `AdmissionFactorTest`: raw factor, smooth step, allowance, away from float edges | passed: 2026-10-25 (`.\gradlew.bat test build`; jar not copied to DEVBOX or the server) |
+| Admission factor in game | At measured TPS >= 19, chunks admit as in 1.0. Under 19 the status line's admission factor falls with TPS and the headroom shrinks; at 10 only the starvation rate remains. `getLoadFactor` still reaches 0 at 15 | not run |
+
 ## 1.0
 
 | Check | How | Status |

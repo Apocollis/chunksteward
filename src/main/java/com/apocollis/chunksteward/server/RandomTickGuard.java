@@ -31,7 +31,8 @@ public final class RandomTickGuard {
         active = ChunkStewardConfig.randomTicks.guardEnabled && Thread.currentThread() == TickMonitor.serverThread;
     }
 
-    static boolean isActive() {
+    /** Plain server-thread flag. Checked on every {@code provideChunk} before {@link #intercept}. */
+    public static boolean isActive() {
         return active;
     }
 
