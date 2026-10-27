@@ -29,12 +29,12 @@ import java.util.Set;
 
 /**
  * {@code /chunksteward}: information and troubleshooting for operators. Everything is read-only except the
- * session-only switches ({@code log}, {@code pregen}) and the hotspot edits ({@code hotspots add|remove|reset}). None of
- * it touches world generation itself.
+ * session-only switches ({@code log}, {@code pregen}, {@code pipeline off|on}) and the hotspot edits
+ * ({@code hotspots add|remove|reset}). None of it generates chunks.
  */
 public class ChunkStewardCommand extends CommandBase {
     private static final List<String> SUBCOMMANDS = Arrays.asList("status", "chunkinfo", "queue", "holds", "log",
-            "pregen", "hotspots");
+            "pregen", "pipeline", "hotspots");
     private static final List<String> HOTSPOT_SUBCOMMANDS = Arrays.asList("list", "here", "add", "remove", "reset");
 
     @Override
@@ -45,7 +45,7 @@ public class ChunkStewardCommand extends CommandBase {
     @Override
     public String getUsage(ICommandSender sender) {
         return "/chunksteward <status | chunkinfo [x z] | queue | holds | log <seconds> | pregen <pause|resume>"
-                + " | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
+                + " | pipeline <status|off|on> | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
     }
 
     @Override
@@ -77,6 +77,9 @@ public class ChunkStewardCommand extends CommandBase {
             case "pregen":
                 pregen(sender, args);
                 break;
+            case "pipeline":
+                pipeline(sender, args);
+                break;
             case "hotspots":
                 hotspots(server, sender, args);
                 break;
@@ -96,6 +99,9 @@ public class ChunkStewardCommand extends CommandBase {
         }
         if (args.length == 2 && "pregen".equalsIgnoreCase(args[0])) {
             return getListOfStringsMatchingLastWord(args, "pause", "resume");
+        }
+        if (args.length == 2 && "pipeline".equalsIgnoreCase(args[0])) {
+            return getListOfStringsMatchingLastWord(args, "status", "off", "on");
         }
         return Collections.emptyList();
     }
@@ -152,6 +158,28 @@ public class ChunkStewardCommand extends CommandBase {
         send(sender, "stage 2 now: " + (Stage2Pregen.activeId < 0 ? "idle" : "hotspot #" + Stage2Pregen.activeId
                 + " in dimension " + Stage2Pregen.activeDim + ", " + Stage2Pregen.activeWhat)
                 + "; last hold-off: " + Stage2Pregen.lastYield());
+        send(sender, TerrainPipeline.summary());
+    }
+
+    private static void pipeline(ICommandSender sender, String[] args) throws CommandException {
+        if (args.length < 2) {
+            throw new WrongUsageException("/chunksteward pipeline <status|off|on>");
+        }
+        switch (args[1].toLowerCase()) {
+            case "status":
+                send(sender, TerrainPipeline.summary());
+                break;
+            case "off":
+                TerrainPipeline.setKilled(true);
+                send(sender, TerrainPipeline.summary(), TextFormatting.YELLOW);
+                break;
+            case "on":
+                TerrainPipeline.setKilled(false);
+                send(sender, TerrainPipeline.summary(), TextFormatting.GREEN);
+                break;
+            default:
+                throw new WrongUsageException("/chunksteward pipeline <status|off|on>");
+        }
     }
 
     // ---- chunkinfo ------------------------------------------------------------------------------------------------

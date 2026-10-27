@@ -1,12 +1,12 @@
 # Operator commands
 
-`/chunksteward <subcommand>`, permission level 2 (operators; in singleplayer cheats must be on). Everything is read-only except the session switches (`log`, `pregen`) and the hotspot edits (`hotspots add|remove|reset`). Nothing here touches world generation itself.
+`/chunksteward <subcommand>`, permission level 2 (operators; in singleplayer cheats must be on). Everything is read-only except the session switches (`log`, `pregen`, `pipeline off|on`) and the hotspot edits (`hotspots add|remove|reset`). Nothing here generates chunks.
 
 ## Information
 
 | Command | Shows |
 | --- | --- |
-| `status` | version, which features are on, tick average, populate queue size, held chunks, chunks waiting for players, stage 2 hotspots and total pregenerated against the warning and limit, what stage 2 is doing now and its last hold-off reason |
+| `status` | version, which features are on, tick average, populate queue size, held chunks, chunks waiting for players, stage 2 hotspots and total pregenerated against the warning and limit, what stage 2 is doing now and its last hold-off reason, and the pipeline line (idle unless a generator class is listed) |
 | `chunkinfo [x z]` | for the chunk you stand in, or the given chunk coordinates: loaded, terrain-populated, light-populated, on disk, queued for populate, terrain-only preload chunk, held by Chunk Steward (ticks left), watched by a player, Forge tickets and their owner mods. The quick answer to "does this chunk have a hole?" |
 | `queue` | populate queue size and the first 10 entries |
 | `holds` | held chunks (preload, cascades, stage 2) and when the oldest hold ends |
@@ -17,6 +17,7 @@
 | --- | --- |
 | `log <seconds>` | sets the status log interval for this session (0 = off); not saved to the config |
 | `pregen pause` / `pregen resume` | pauses or resumes preload and stage 2 for this session, to rule them out |
+| `pipeline status` / `pipeline off` / `pipeline on` | pipeline state. `off` stops it for this session; `on` clears that. With no generator class listed it stays idle either way. See [pipeline.md](pipeline.md) |
 
 ## Hotspots
 

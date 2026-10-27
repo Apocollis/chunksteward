@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.1
+- Terrain pipeline infrastructure, no generation. `pipeline.enabled` defaults on and `allowedGenerators` defaults empty, so no worker starts and loading is unchanged. `/chunksteward pipeline off|on` is a session kill switch. `ChunkStewardAPI` stays at version 2. See `docs/pipeline.md`.
 - Below `throttle.tpsFull` (19), the headroom allowance gains `headroomBoostMs` (60) scaled by an admission factor: 1 at 19 TPS, 0 at `tpsClamp` (10). At 19 and above every chunk is still admitted, and vanilla's loop still stops 50 ms after a success. The shortcut that also admitted everything when the 20-tick average was under 50 ms is gone. `getLoadFactor` and `getHeadroomMs` are unchanged. See `docs/throttle.md`.
 - Random-tick guard: `provideChunk` returns on a single flag check when no random tick is in progress, so lighting no longer calls `RandomTickGuard.intercept` on every light read. During `WorldServer.updateBlocks` an unloaded chunk still gets an empty chunk. See `docs/random-ticks.md`.
 

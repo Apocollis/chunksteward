@@ -8,6 +8,8 @@
 | Random-tick guard early exit | A second Flare capture of the same route | dropped 2026-10-25: the same route cannot be repeated closely enough to compare. The 2026-10-24 capture (4.9 s in `chunksteward$randomTickGuard`) stays the reason for the change. While the flag is clear the handler returns before `intercept`; while it is set, the loaded-chunk check and the empty chunk are unchanged |
 | Admission factor math | `AdmissionFactorTest`: raw factor, smooth step, allowance, away from float edges | passed: 2026-10-25 (`.\gradlew.bat test build`; jar not copied to DEVBOX or the server) |
 | Admission factor in game | At measured TPS >= 19, chunks admit as in 1.0. Under 19 the status line's admission factor falls with TPS and the headroom shrinks; at 10 only the starvation rate remains. `getLoadFactor` still reaches 0 at 15 | not run |
+| Pipeline job, rank, and CPU-guard math | `PipelineTest`: empty whitelist does not engage, worker count, claim/publish/steal, epoch drop, guard step and probation | passed: 2026-10-26 (`.\gradlew.bat test build`, 10 tests). Jar deployed to DEVBOX the same night; not copied to the server |
+| Pipeline idle matches 1.1 | `pipeline.enabled` true with an empty `allowedGenerators`: no worker threads, status log unchanged, chunks load as before. `enabled` false is the same code path and was not its own session | passed: 2026-10-26 DEVBOX. Server start 23:21, `pipeline.enabled=true`, `allowedGenerators` empty, no `pipeline workers started` line, status log format unchanged, chunks generated and deferred on the existing throttle. No chunksteward errors |
 
 ## 1.0
 

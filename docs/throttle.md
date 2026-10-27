@@ -1,6 +1,6 @@
 # Adaptive throttle
 
-Hook: `PlayerChunkMap.tick` calls `providePlayerChunk(canGenerate)` for each entry whose chunk is missing. Vanilla stops at 50 ms or 49 chunks and always lets the first success through. `ChunkThrottle.provide` wraps that call. A `false` return keeps the entry queued for a later tick. The order in which entries are offered is set by [ordering.md](ordering.md).
+Hook: `PlayerChunkMap.tick` calls `providePlayerChunk(canGenerate)` for each entry whose chunk is missing. Vanilla stops at 50 ms or 49 chunks and always lets the first success through. `ChunkThrottle.provide` wraps that call. A `false` return keeps the entry queued for a later tick. The order in which entries are offered is set by [ordering.md](ordering.md). The terrain pipeline does not take part in this decision while no generator class is listed, which is the default ([pipeline.md](pipeline.md)).
 
 - `canGenerate == false` (disk load only) and dimensions excluded by the dimension list pass straight through.
 - **Busy signal:** `TickMonitor` keeps an EMA (alpha 0.1, about 20 ticks) of tick work *excluding* chunk provision, measured from `MinecraftServer.tick` HEAD to RETURN. A second EMA of chunk provision time (`chunkEmaMs`) is the "heavy generation" signal for light deferral.

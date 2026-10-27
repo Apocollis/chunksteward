@@ -16,6 +16,7 @@ public class ChunkStewardConfig {
     public static Light light = new Light();
     public static Dimensions dimensions = new Dimensions();
     public static Logging logging = new Logging();
+    public static Pipeline pipeline = new Pipeline();
 
     public static class Throttle {
         @Config.Comment("Master switch for the adaptive chunk throttle.")
@@ -360,5 +361,71 @@ public class ChunkStewardConfig {
         @Config.Comment("Number of slowest world generators (IWorldGenerator classes) listed in the status log.")
         @Config.RangeInt(min = 0, max = 50)
         public int topGenerators = 8;
+    }
+
+    public static class Pipeline {
+        @Config.Comment({"Master switch. With an empty allowedGenerators list this stays idle: no worker threads,",
+                "no deferred chunks, and loading matches the build without a pipeline."})
+        public boolean enabled = true;
+
+        @Config.Comment({"Worker threads. 0 = max(1, min(2, available processors - 2)): 2 when at least four logical",
+                "processors are present, otherwise 1. A set value is clamped to 1 or 2. Threads start only when a",
+                "generator class is listed. This build does not generate off-thread."})
+        @Config.RangeInt(min = 0, max = 2)
+        public int workers = 0;
+
+        @Config.Comment("How many ranked jobs a snapshot keeps. The ranking window, not a count of concurrent generations.")
+        @Config.RangeInt(min = 1, max = 64)
+        public int maxInFlight = 16;
+
+        @Config.Comment("Ready results waiting for the server thread. Workers stop claiming new jobs at this size.")
+        @Config.RangeInt(min = 1, max = 1024)
+        public int maxReady = 64;
+
+        @Config.Comment("Milliseconds the server thread waits on a worker that already claimed a job before generating it itself.")
+        @Config.RangeInt(min = 0, max = 1000)
+        public int stealWaitMs = 10;
+
+        @Config.Comment("Seconds before a claimed job is abandoned. The worker is not interrupted mid-chunk.")
+        @Config.RangeInt(min = 1, max = 300)
+        public int jobTimeoutSeconds = 30;
+
+        @Config.Comment("Failures of one generator class in a dimension before that class stays on the server thread.")
+        @Config.RangeInt(min = 1, max = 20)
+        public int maxFailures = 3;
+
+        @Config.Comment("Run the equivalence check at server start. Leave false until a class has passed it.")
+        public boolean verifyOnStart = false;
+
+        @Config.Comment({"Generator classes allowed off-thread, and only in dimensions where that class has passed",
+                "the equivalence check. Empty = no off-thread generation."})
+        public String[] allowedGenerators = new String[0];
+
+        @Config.Comment("Preload and stage 2 may queue terrain behind player chunks. They install a result only when it is finished.")
+        public boolean speculative = true;
+
+        @Config.Comment("Seconds a ready result may sit unused before it is dropped.")
+        @Config.RangeInt(min = 1, max = 3600)
+        public int readyTtlSeconds = 120;
+
+        @Config.Comment({"CPU contention signal: thread (server-thread CPU time over tick wall time), system (host CPU load),",
+                "or off. Sampling runs only while a generator class is listed. thread falls back to system."})
+        public String cpuGuard = "thread";
+
+        @Config.Comment("thread signal: a server-thread CPU ratio below this for cpuGuardSeconds counts as contention.")
+        @Config.RangeDouble(min = 0.5, max = 1.0)
+        public double cpuGuardRatio = 0.85;
+
+        @Config.Comment("system signal: host CPU load above this for cpuGuardSeconds counts as contention.")
+        @Config.RangeDouble(min = 0.5, max = 1.0)
+        public double cpuGuardLoad = 0.90;
+
+        @Config.Comment("Seconds the signal must stay past the line before it counts as contention.")
+        @Config.RangeInt(min = 1, max = 60)
+        public int cpuGuardSeconds = 3;
+
+        @Config.Comment("Minimum seconds between worker-cap steps, down or up.")
+        @Config.RangeInt(min = 1, max = 120)
+        public int cpuGuardResumeSeconds = 10;
     }
 }

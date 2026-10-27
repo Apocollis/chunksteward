@@ -73,9 +73,11 @@ public final class TickMonitor {
         generatedThisTick = 0;
         externalGenThisTick = 0;
         ChunkThrottle.onTickStart();
+        TerrainPipeline.onTickStart();
     }
 
     public static void onTickEnd() {
+        TerrainPipeline.onTickEnd();
         long now = System.nanoTime();
         EXTERNAL_RING[tick & 255] = externalGenThisTick;
         double totalMs = (now - tickStartNanos) / 1.0e6;

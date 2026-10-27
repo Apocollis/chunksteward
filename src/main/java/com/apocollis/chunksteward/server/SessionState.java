@@ -31,5 +31,6 @@ public final class SessionState {
         GeneratedCache.reset();
         RandomTickGuard.onTickStart();
         Diagnostics.reset();
+        TerrainPipeline.reset();
     }
 }
