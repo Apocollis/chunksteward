@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.server;
 
+import java.util.Random;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.BiomeProvider;
 import net.minecraft.world.storage.MapStorage;
@@ -15,6 +16,7 @@ public final class PipelineMarker {
     private static final ThreadLocal<BiomeProvider> BIOME = new ThreadLocal<BiomeProvider>();
     private static final ThreadLocal<Integer> DIMENSION = new ThreadLocal<Integer>();
     private static final ThreadLocal<MapStorage> SCRATCH = new ThreadLocal<MapStorage>();
+    private static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>();
 
     private PipelineMarker() {
     }
@@ -28,12 +30,18 @@ public final class PipelineMarker {
         }
     }
 
-    /** Also drops a sea level a failed NetherEx {@code buildSurface} left on this thread. */
+    /**
+     * Also drops a sea level, highlands surface blocks, or an RTG generator random a failed generation left on this
+     * thread. The cellular caches stay; they are keyed by noise instance and bounded.
+     */
     public static void clear() {
         FLAGS.remove();
         BIOME.remove();
         DIMENSION.remove();
+        RANDOM.remove();
         ThreadSeaLevel.clear();
+        ThreadSurfaceBlocks.exit();
+        ThreadRtg.clearGenerator();
     }
 
     public static boolean worker() {
@@ -79,5 +87,20 @@ public final class PipelineMarker {
             SCRATCH.set(storage);
         }
         return storage;
+    }
+
+    /**
+     * This thread's {@code Random}, reseeded with {@code seed}. {@code World.setRandomSeed} returns it on pipeline
+     * threads so they do not reseed the shared {@code World.rand} that another thread is drawing from.
+     */
+    public static Random random(long seed) {
+        Random random = RANDOM.get();
+        if (random == null) {
+            random = new Random(seed);
+            RANDOM.set(random);
+        } else {
+            random.setSeed(seed);
+        }
+        return random;
     }
 }

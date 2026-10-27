@@ -1,6 +1,6 @@
 # Chunk Steward — Architecture
 
-Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk. A dimension's own chunk generator can move off the server thread after a verify pass for that class ([pipeline.md](pipeline.md)). RTG is included; its copy still shares `RTGWorld`. Populate and every `IWorldGenerator` stay on the server thread.
+Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk. A dimension's own chunk generator can move off the server thread after a verify pass for that class ([pipeline.md](pipeline.md)). RTG is included. A worker or verify thread uses that generator's random, locks each shared terrain and surface call, and keeps a private cellular cache. The server thread still uses the shared `RTGWorld`. Populate and every `IWorldGenerator` stay on the server thread.
 
 Formerly Lazy Chunks 1.12 (modid `lazychunks`); renamed to Chunk Steward (modid `chunksteward`) when the scope grew past chunk loading. Credits and licence notes: [../NOTICE.md](../NOTICE.md).
 
@@ -58,10 +58,12 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 
 | Config | Mixins | Purpose |
 | --- | --- | --- |
-| `netherapi` | `MixinChunkGeneratorNether`, `MixinChunkGeneratorTheEnd`, `MixinAbstractNetherExBiome` | worker chunks; NetherEx biomes' `buildSurface` sets sea level on a per-thread, per-world value (`ThreadSeaLevel`, `@WrapMethod` with `finally`) instead of the shared `World` |
+| `netherapi` | `MixinChunkGeneratorNether`, `MixinChunkGeneratorTheEnd`, `MixinAbstractNetherExBiome` | worker chunks; the end generator's `recreateStructures` also records the end city starts (Nether API's override drops vanilla's call); NetherEx biomes' `buildSurface` sets sea level on a per-thread, per-world value (`ThreadSeaLevel`, `@WrapMethod` with `finally`) instead of the shared `World` |
 | `endexpansion` | `MixinBiomeBarrendLands` (package `mixin.endexpansion`) | Barrend `buildSurface` takes `nextInt` from the generator's random, not the biome's shared one |
 | `aurorian` | `MixinAurorianChunkGenerator` | reseeds the generator random from the chunk position in `generateChunk` and `populate`, so order does not matter |
-| `betweenlands` | `MixinBiomeGenerator` and the nine noise features | noise buffers and the "noise generated" flag per thread (`ThreadNoise`); first `initializeGenerators` per thread runs under the generator's lock |
+| `betweenlands` | `MixinBiomeGenerator` and the nine noise features | noise buffers (reads only; Mixin cannot redirect an array-field `PUTFIELD`) and the "noise generated" flag per thread (`ThreadNoise`); first `initializeGenerators` per thread runs under the generator's lock |
+| `rtg` | `MixinChunkGeneratorRTG`, `MixinLatePopulatingChunk`, `MixinRTGWorld`, `MixinRealisticBiomeBase`, `MixinTraverseStep`, `MixinSpacedCellularNoise` | worker chunks; on a worker or verify thread, `RTGWorld.rand()` is that generator copy's `Random`, `generateNoise` and `paintTerrain` run one thread at a time per instance, and each thread has its own cellular cache |
+| `twilight` | `MixinChunkGeneratorTwilightForest`, `MixinChunkGeneratorTwilightVoid`, `MixinTFBiomeHighlands`, `MixinTFBiomeBase` | worker chunks; the highlands biome's per-column top and filler block are held per thread (`ThreadSurfaceBlocks`) instead of in the shared biome fields |
 | `atum` | `MixinChunkGeneratorAtum` | clones the 16×16 surface biomes after `getBiomes` and copies them back before `new Chunk`, so pyramid ground sampling's 10×10 write does not reach the chunk |
 | `MixinChunk` | `IChunkGenerator.func_185931_b` INVOKE, before and after, inside `func_186034_a` | generator populate timing (decoration and structure paste, apart from mod world generators) |
 | `MixinMinecraftServer` | `func_71217_p` HEAD/RETURN, `func_71267_a` HEAD | tick timing, save notice |

@@ -19,19 +19,9 @@ public abstract class MixinMarsh1Feature {
         return ThreadNoise.of(self).first;
     }
 
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = ISLAND, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$putIsland(Marsh1Feature self, double[] value) {
-        ThreadNoise.of(self).first = value;
-    }
-
     @Redirect(method = {"generateNoise", "replaceStackBlocks"},
             at = @At(value = "FIELD", target = FUZZ, opcode = Opcodes.GETFIELD))
     private double[] chunksteward$getFuzz(Marsh1Feature self) {
         return ThreadNoise.of(self).second;
-    }
-
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = FUZZ, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$putFuzz(Marsh1Feature self, double[] value) {
-        ThreadNoise.of(self).second = value;
     }
 }

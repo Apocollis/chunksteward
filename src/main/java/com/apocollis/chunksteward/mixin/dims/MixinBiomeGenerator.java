@@ -13,6 +13,11 @@ import thebetweenlands.common.world.gen.biome.generator.BiomeGenerator;
  * Each Betweenlands biome owns one {@code BiomeGenerator}, shared by every thread. Its surface noise buffer and the
  * "noise generated for this chunk" flag live in {@link ThreadNoise} per thread instead. The noise generator itself
  * stays shared; each thread's first {@code initializeGenerators} runs under the generator's lock so it sees it built.
+ *
+ * <p>Only the reads of the buffer fields are redirected. Mixin cannot redirect a {@code PUTFIELD} of an array field
+ * ("Unsupported opcode PUTFIELD for array access"), and it drops the whole mixin class when it tries. The assignment in
+ * {@code generateNoise} stays: the redirected read hands {@code getRegion} this thread's array, which it fills and
+ * returns, so the shared field is only ever set to a reference nobody reads.
  */
 @Mixin(value = BiomeGenerator.class, remap = false)
 public abstract class MixinBiomeGenerator {
@@ -34,13 +39,6 @@ public abstract class MixinBiomeGenerator {
             opcode = Opcodes.GETFIELD))
     private double[] chunksteward$getNoise(BiomeGenerator self) {
         return ThreadNoise.of(self).first;
-    }
-
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD",
-            target = "Lthebetweenlands/common/world/gen/biome/generator/BiomeGenerator;baseBlockLayerVariationNoise:[D",
-            opcode = Opcodes.PUTFIELD))
-    private void chunksteward$putNoise(BiomeGenerator self, double[] value) {
-        ThreadNoise.of(self).first = value;
     }
 
     @Redirect(method = "generateNoise", at = @At(value = "FIELD",

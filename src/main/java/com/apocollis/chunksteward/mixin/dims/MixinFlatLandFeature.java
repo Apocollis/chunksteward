@@ -19,19 +19,9 @@ public abstract class MixinFlatLandFeature {
         return ThreadNoise.of(self).first;
     }
 
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = LAND, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$putLand(FlatLandFeature self, double[] value) {
-        ThreadNoise.of(self).first = value;
-    }
-
     @Redirect(method = {"generateNoise", "replaceStackBlocks"},
             at = @At(value = "FIELD", target = RIVER, opcode = Opcodes.GETFIELD))
     private double[] chunksteward$getRiver(FlatLandFeature self) {
         return ThreadNoise.of(self).second;
-    }
-
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = RIVER, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$putRiver(FlatLandFeature self, double[] value) {
-        ThreadNoise.of(self).second = value;
     }
 }

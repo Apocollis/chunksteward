@@ -17,9 +17,4 @@ public abstract class MixinSiltBeachFeature {
     private double[] chunksteward$get(SiltBeachFeature self) {
         return ThreadNoise.of(self).first;
     }
-
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = NOISE, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$put(SiltBeachFeature self, double[] value) {
-        ThreadNoise.of(self).first = value;
-    }
 }

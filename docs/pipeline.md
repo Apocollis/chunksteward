@@ -2,7 +2,7 @@
 
 A dimension's own chunk generator can run on worker threads after a verify pass for that exact class. With the default empty `pipeline.allowedGenerators` list, no worker threads start, the CPU guard does not sample, and chunk loading is unchanged.
 
-A class generates off-thread only in a dimension where `/chunksteward pipeline verify 10000` finished clean. The pass is stored in `chunksteward-pipeline-passes.txt` in the overworld save. A parent class does not stand in for a subclass. RTG's copy still shares `RTGWorld`, so a verify mismatch leaves it on the server thread.
+A class generates off-thread only in a dimension where `/chunksteward pipeline verify 10000` finished clean. The pass is stored in `chunksteward-pipeline-passes.txt` in the overworld save. A parent class does not stand in for a subclass. On a worker or verify thread, RTG uses that generator's `Random`, locks each terrain `generateNoise` and surface `paintTerrain`, and keeps a private cellular cache. The server thread still uses the shared `RTGWorld`. A verify mismatch leaves the generator on the server thread.
 
 Classes verify can build:
 
@@ -49,7 +49,10 @@ Each worker has its own generator and biome provider copy. State those copies st
 - Nether API's NetherEx biomes: `setSeaLevel` goes to a per-thread value for that world, restored on exit.
 - End Expansion's Barrend biome: uses the generator's random.
 - Aurorian: the generator random is reseeded from the chunk position.
-- Betweenlands: biome noise buffers per thread.
+- `World.setRandomSeed`: on a worker or verify thread it seeds a per-thread `Random` (vanilla formula) instead of the shared `World.rand`, so structure spawn checks (Emptiness spires, end cities) do not race.
+- Nether API's end: `recreateStructures` also generates the end city starts, as vanilla's does.
+- Betweenlands: biome noise buffers per thread (reads redirected; the array assignment stays, see `MixinBiomeGenerator`).
+- Twilight Forest highlands: the column's top and filler block are held per thread; the shared biome fields stay at their defaults.
 - Atum: the chunk keeps the 16×16 surface biomes. Verify snapshots Tweaks' pyramid plates and removes or reverts the ones the run added inside its square (plus 256 blocks), leaving plates the server thread registered elsewhere.
 
 ## Config (`pipeline`)
@@ -81,4 +84,4 @@ The thread ratio (CPU time over that tick's wall time) is smoothed per tick, alp
 
 ## Not in this build
 
-No speculative preload or stage 2, no API version change (`ChunkStewardAPI` stays at 2). A mismatch or a generator with no copy stays on the server thread. RTG is copied for verify; the shared `RTGWorld` is unchanged.
+No speculative preload or stage 2, no API version change (`ChunkStewardAPI` stays at 2). A mismatch or a generator with no copy stays on the server thread. RTG is copied for verify. A worker or verify thread does not share `rand()`, the terrain and surface fields those calls write, or the cellular cache.

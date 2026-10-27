@@ -21,19 +21,9 @@ public abstract class MixinCoarseIslandsFeature {
         return ThreadNoise.of(self).first;
     }
 
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = ISLAND, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$putIsland(CoarseIslandsFeature self, double[] value) {
-        ThreadNoise.of(self).first = value;
-    }
-
     @Redirect(method = {"generateNoise", "getCragrockNoiseAt"},
             at = @At(value = "FIELD", target = CRAG, opcode = Opcodes.GETFIELD))
     private double[] chunksteward$getCrag(CoarseIslandsFeature self) {
         return ThreadNoise.of(self).second;
-    }
-
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = CRAG, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$putCrag(CoarseIslandsFeature self, double[] value) {
-        ThreadNoise.of(self).second = value;
     }
 }

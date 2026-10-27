@@ -7,6 +7,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "MixinChunkGeneratorTwilightForest",
-    "MixinChunkGeneratorTwilightVoid"
+    "MixinChunkGeneratorTwilightVoid",
+    "MixinTFBiomeBase",
+    "MixinTFBiomeHighlands"
   ]
 }

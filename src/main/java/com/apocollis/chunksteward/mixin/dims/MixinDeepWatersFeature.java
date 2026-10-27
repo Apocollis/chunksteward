@@ -17,9 +17,4 @@ public abstract class MixinDeepWatersFeature {
     private double[] chunksteward$get(DeepWatersFeature self) {
         return ThreadNoise.of(self).first;
     }
-
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = NOISE, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$put(DeepWatersFeature self, double[] value) {
-        ThreadNoise.of(self).first = value;
-    }
 }

@@ -17,9 +17,4 @@ public abstract class MixinPatchFeature {
     private double[] chunksteward$get(PatchFeature self) {
         return ThreadNoise.of(self).first;
     }
-
-    @Redirect(method = "generateNoise", at = @At(value = "FIELD", target = NOISE, opcode = Opcodes.PUTFIELD))
-    private void chunksteward$put(PatchFeature self, double[] value) {
-        ThreadNoise.of(self).first = value;
-    }
 }
