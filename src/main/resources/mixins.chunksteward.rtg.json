@@ -6,6 +6,7 @@
   "package": "com.apocollis.chunksteward.mixin.rtg",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "MixinLatePopulatingChunk"
+    "MixinLatePopulatingChunk",
+    "MixinChunkGeneratorRTG"
   ]
 }

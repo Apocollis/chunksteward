@@ -145,7 +145,7 @@ public final class IdlePreload {
         for (int i = 0; i < players.size(); i++) {
             EntityPlayerMP player = players.get((rotate + i) % players.size());
             PlayerState state = STATES.get(player.getUniqueID());
-            if (state == null || !Dimensions.applies(player.dimension)) {
+            if (state == null || !Dimensions.applies(player.dimension) || TerrainPipeline.isPaused(player.dimension)) {
                 continue;
             }
             int tier = tierOf(player, state, cfg);

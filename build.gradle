@@ -19,6 +19,12 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 21
 }
 
+// Generator mods the dimension mixins target. Compile only, never shipped: copy the DEVBOX jars into libs/mods.
+configurations {
+    modCompileOnly
+    compileOnly.extendsFrom modCompileOnly
+}
+
 unimined.minecraft {
     version '1.12.2'
 
@@ -30,17 +36,25 @@ unimined.minecraft {
         loader('0.5.7-alpha')
     }
 
+    mods {
+        remap(configurations.modCompileOnly)
+    }
+
     defaultRemapJar = true
 }
 
 repositories {
     mavenCentral()
     flatDir {
-        dirs 'libs'
+        dirs 'libs', 'libs/mods'
     }
 }
 
 dependencies {
+    // Unimined remaps resolved module artifacts only, so each jar is a flatDir module rather than a file dependency.
+    (file('libs/mods').listFiles() ?: []).findAll { it.name.endsWith('.jar') }.sort { it.name }.each { jar ->
+        modCompileOnly(name: jar.name - '.jar')
+    }
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
 }
@@ -97,6 +111,12 @@ tasks.register('verifyReleaseJar') {
             if (zip.getEntry("mixins.chunksteward.rtg.json") == null) {
                 throw new GradleException("mixins.chunksteward.rtg.json missing from remapped jar")
             }
+            ["netherex", "netherapi", "aurorian", "atum", "twilight", "aether", "beneath", "betweenlands", "emptiness", "endexpansion"].each { name ->
+                def entry = "mixins.chunksteward.${name}.json"
+                if (zip.getEntry(entry) == null) {
+                    throw new GradleException("${entry} missing from remapped jar")
+                }
+            }
             if (zip.getEntry("com/apocollis/chunksteward/ChunkStewardLateMixinLoader.class") == null) {
                 throw new GradleException("ChunkStewardLateMixinLoader missing from remapped jar")
             }
@@ -115,6 +135,21 @@ tasks.register('verifyReleaseJar') {
                 if (major != 65) {
                     throw new GradleException(
                             "${e.name} class major ${major}, expected 65 (Java 21). Do not change options.release.")
+                }
+                // Generator mods are compile-only (libs/mods). Only late, class-gated mixin configs and the loader's
+                // presence probes may name their types; anything else would fail to load in a pack without the mod.
+                def lateOnly = ["com/apocollis/chunksteward/mixin/dims/", "com/apocollis/chunksteward/mixin/endexpansion/",
+                                "com/apocollis/chunksteward/mixin/rtg/", "com/apocollis/chunksteward/ChunkStewardLateMixinLoader"]
+                if (lateOnly.any { e.name.startsWith(it) }) {
+                    return
+                }
+                def text = new String(bytes, "ISO-8859-1")
+                ["git/jbredwards/", "logictechcorp/", "com/example/structure/", "com/shiroroku/", "com/teammetallurgy/",
+                 "thebetweenlands/", "com/apocollis/aqtweaks/"].each { pkg ->
+                    if (text.contains(pkg)) {
+                        throw new GradleException("${e.name} references ${pkg}; generator mods are optional, so only " +
+                                "class-gated mixin configs may name their types (look them up by name instead)")
+                    }
                 }
             }
         } finally {

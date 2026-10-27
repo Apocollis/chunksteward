@@ -28,6 +28,7 @@ A hotspot is worked on only when all of these hold:
 - the player is not fast (the moving-tier speed limit, `preload.movingMaxSpeed`);
 - `Pregen.holdOffReason(stage2.maxTickMs)` is empty: no chunks waiting for players, no recent busy generation (`preload.busyChunks`), no populate backlog (`preload.maxPopulateBacklog`), no save due, tick average and current tick under `maxTickMs` (30);
 - `/chunksteward pregen pause` is not active and `maxTotalChunks` is not reached.
+- A pipeline verify is not running in the player's dimension ([pipeline.md](pipeline.md)).
 
 At most one operation every `intervalTicks` (4) and `maxPerMinute` (240) per hotspot.
 

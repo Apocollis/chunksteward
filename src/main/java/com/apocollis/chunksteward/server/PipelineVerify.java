@@ -1,20 +1,18 @@
 package com.apocollis.chunksteward.server;
 
 import com.apocollis.chunksteward.ChunkSteward;
-import com.apocollis.chunksteward.mixin.AccessorChunkGeneratorEnd;
-import com.apocollis.chunksteward.mixin.AccessorChunkGeneratorHell;
 import com.apocollis.chunksteward.mixin.AccessorMapGenStructure;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import net.minecraft.block.Block;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.biome.BiomeProvider;
 import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.ChunkGeneratorEnd;
-import net.minecraft.world.gen.ChunkGeneratorHell;
 import net.minecraft.world.gen.IChunkGenerator;
 import net.minecraft.world.gen.structure.MapGenStructure;
 import net.minecraft.world.gen.structure.StructureStart;
 
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -25,6 +23,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 final class PipelineVerify {
     private static final int ORIGIN = 30000;
+    /** Blocks past the verify square: a structure start up to 8 chunks out, plus the pyramid footprint. */
+    private static final int PLATE_MARGIN = 256;
     private static volatile boolean running;
     private static volatile String status = "not run";
 
@@ -44,20 +44,25 @@ final class PipelineVerify {
             return false;
         }
         IChunkGenerator main = PipelineGenerators.of(world);
+        if (main == null) {
+            status = "no chunk generator";
+            return false;
+        }
         if (!PipelineGenerators.supported(main)) {
-            status = "generator is not ChunkGeneratorHell or ChunkGeneratorEnd";
+            status = "generator is " + main.getClass().getName() + "; no copy for this class";
             return false;
         }
-        if (PipelineGenerators.copyBiome(world) == null) {
-            status = "biome provider cannot be copied";
-            return false;
-        }
-        IChunkGenerator reference = PipelineGenerators.copy(world, main);
-        IChunkGenerator production = PipelineGenerators.copy(world, main);
         BiomeProvider referenceBiome = PipelineGenerators.copyBiome(world);
         BiomeProvider productionBiome = PipelineGenerators.copyBiome(world);
-        if (reference == null || production == null || referenceBiome == null || productionBiome == null) {
-            status = "could not build verify generators";
+        if (referenceBiome == null || productionBiome == null) {
+            BiomeProvider current = world.provider.getBiomeProvider();
+            status = "biome provider cannot be copied: " + (current == null ? "null" : current.getClass().getName());
+            return false;
+        }
+        IChunkGenerator reference = PipelineGenerators.copy(world, main, referenceBiome);
+        IChunkGenerator production = PipelineGenerators.copy(world, main, productionBiome);
+        if (reference == null || production == null) {
+            status = "could not build verify generators for " + main.getClass().getName();
             return false;
         }
         int dimension = world.provider.getDimension();
@@ -77,8 +82,10 @@ final class PipelineVerify {
     private static void execute(WorldServer world, int count, int dimension, String className,
                                 IChunkGenerator reference, IChunkGenerator production,
                                 BiomeProvider referenceBiome, BiomeProvider productionBiome) {
+        java.util.Map<java.lang.reflect.Field, java.util.Map<Object, Object>> stash = PipelineGenerators.snapshotVillageStash();
+        java.util.Map<Object, Object> plates = PipelineGenerators.snapshotPyramidPlates();
+        int side = (int) Math.ceil(Math.sqrt(count));
         try {
-            int side = (int) Math.ceil(Math.sqrt(count));
             ConcurrentHashMap<Long, Long> referenceHashes = new ConcurrentHashMap<Long, Long>();
             ConcurrentHashMap<Long, Long> productionHashes = new ConcurrentHashMap<Long, Long>();
             AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
@@ -118,6 +125,9 @@ final class PipelineVerify {
             status = "failed";
             ChunkSteward.LOGGER.warn("pipeline verify failed for {} in dimension {}", className, dimension, failed);
         } finally {
+            PipelineGenerators.restoreVillageStash(stash);
+            PipelineGenerators.restorePyramidPlates(plates, dimension, ORIGIN * 16 - PLATE_MARGIN,
+                    (ORIGIN + side) * 16 + PLATE_MARGIN, ORIGIN * 16 - PLATE_MARGIN, (ORIGIN + side) * 16 + PLATE_MARGIN);
             TerrainPipeline.resume(dimension);
             running = false;
         }
@@ -146,7 +156,7 @@ final class PipelineVerify {
                                   int x, int z) {
         Chunk[] held = new Chunk[1];
         PipelineMarker.set(production, true);
-        PipelineMarker.biome(biome);
+        PipelineMarker.biome(biome, world.provider.getDimension());
         try {
             BedrockShim.run(world, () -> held[0] = generator.generateChunk(x, z));
             if (production) {
@@ -196,23 +206,49 @@ final class PipelineVerify {
         return hash;
     }
 
+    /** Every structure generator on the instance, including a subclass field the parent does not use. */
     private static long hashStructures(IChunkGenerator generator) {
-        MapGenStructure structures = null;
-        if (generator instanceof ChunkGeneratorHell) {
-            structures = ((AccessorChunkGeneratorHell) generator).chunksteward$bridge();
-        } else if (generator instanceof ChunkGeneratorEnd) {
-            structures = ((AccessorChunkGeneratorEnd) generator).chunksteward$cities();
+        long hash = 1L;
+        boolean any = false;
+        for (Class<?> type = generator.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
+            for (Field field : type.getDeclaredFields()) {
+                try {
+                    if (MapGenStructure.class.isAssignableFrom(field.getType())) {
+                        field.setAccessible(true);
+                        hash = mixStructure(hash, (MapGenStructure) field.get(generator));
+                        any = true;
+                    } else if (field.getType().isArray()
+                            && MapGenStructure.class.isAssignableFrom(field.getType().getComponentType())) {
+                        field.setAccessible(true);
+                        Object array = field.get(generator);
+                        if (array == null) {
+                            continue;
+                        }
+                        int length = Array.getLength(array);
+                        for (int i = 0; i < length; i++) {
+                            hash = mixStructure(hash, (MapGenStructure) Array.get(array, i));
+                            any = true;
+                        }
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    return 0L;
+                }
+            }
         }
+        return any ? hash : 0L;
+    }
+
+    private static long mixStructure(long hash, MapGenStructure structures) {
+        hash = hash * 31L + (structures == null ? 0 : structures.getClass().getName().hashCode());
         if (!(structures instanceof AccessorMapGenStructure)) {
-            return 0L;
+            return hash;
         }
         Long2ObjectMap<StructureStart> starts = ((AccessorMapGenStructure) structures).chunksteward$structureMap();
         if (starts == null || starts.isEmpty()) {
-            return 0L;
+            return hash;
         }
         long[] keys = starts.keySet().toLongArray();
         Arrays.sort(keys);
-        long hash = 1L;
         for (long key : keys) {
             StructureStart start = starts.get(key);
             hash = hash * 31L + key;

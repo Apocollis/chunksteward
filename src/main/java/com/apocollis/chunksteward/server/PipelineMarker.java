@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.server;
 
+import net.minecraft.world.World;
 import net.minecraft.world.biome.BiomeProvider;
 import net.minecraft.world.storage.MapStorage;
 
@@ -12,6 +13,7 @@ public final class PipelineMarker {
     private static final int VERIFY = 2;
     private static final ThreadLocal<Integer> FLAGS = ThreadLocal.withInitial(() -> 0);
     private static final ThreadLocal<BiomeProvider> BIOME = new ThreadLocal<BiomeProvider>();
+    private static final ThreadLocal<Integer> DIMENSION = new ThreadLocal<Integer>();
     private static final ThreadLocal<MapStorage> SCRATCH = new ThreadLocal<MapStorage>();
 
     private PipelineMarker() {
@@ -26,9 +28,12 @@ public final class PipelineMarker {
         }
     }
 
+    /** Also drops a sea level a failed NetherEx {@code buildSurface} left on this thread. */
     public static void clear() {
         FLAGS.remove();
         BIOME.remove();
+        DIMENSION.remove();
+        ThreadSeaLevel.clear();
     }
 
     public static boolean worker() {
@@ -39,16 +44,32 @@ public final class PipelineMarker {
         return (FLAGS.get() & VERIFY) != 0;
     }
 
-    public static void biome(BiomeProvider provider) {
+    /** The job's private provider and the dimension it belongs to. */
+    public static void biome(BiomeProvider provider, int dimension) {
         if (provider == null) {
             BIOME.remove();
+            DIMENSION.remove();
         } else {
             BIOME.set(provider);
+            DIMENSION.set(dimension);
         }
     }
 
-    public static BiomeProvider biome() {
-        return BIOME.get();
+    /**
+     * The job's provider when this thread is a worker or verify leg and {@code world} is the job's dimension, else null.
+     * A lookup on another dimension's world keeps that world's own provider.
+     */
+    public static BiomeProvider biomeFor(World world) {
+        if (FLAGS.get() == 0) {
+            return null;
+        }
+        BiomeProvider provider = BIOME.get();
+        Integer dimension = DIMENSION.get();
+        if (provider == null || dimension == null || world == null || world.provider == null
+                || world.provider.getDimension() != dimension) {
+            return null;
+        }
+        return provider;
     }
 
     public static MapStorage scratch() {

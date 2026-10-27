@@ -1,6 +1,6 @@
 # Chunk Steward — Architecture
 
-Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk. Vanilla nether and end terrain can move off the server thread after a verify pass ([pipeline.md](pipeline.md)). Populate and every `IWorldGenerator` stay on the server thread.
+Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk. A dimension's own chunk generator can move off the server thread after a verify pass for that class ([pipeline.md](pipeline.md)). RTG is included; its copy still shares `RTGWorld`. Populate and every `IWorldGenerator` stay on the server thread.
 
 Formerly Lazy Chunks 1.12 (modid `lazychunks`); renamed to Chunk Steward (modid `chunksteward`) when the scope grew past chunk loading. Credits and licence notes: [../NOTICE.md](../NOTICE.md).
 
@@ -45,9 +45,24 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 | `MixinGameRegistry` | `@Redirect` of `IWorldGenerator.generate` inside Forge `GameRegistry.generateWorld` (`remap = false`) | per-generator timing |
 | `MixinMapGenBase` | `MapGenBase.func_186125_a` HEAD/RETURN | terrain-stage map-gen timing by class (caves, ravines, structure layout) |
 | `MixinMapGenStructure` | `MapGenStructure.func_175794_a` HEAD/RETURN | structure paste timing by class (inside populate) |
-| `MixinMapGenStructure` | adds `MapGenBase.generate` | pipeline workers skip structure layout |
-| `MixinChunkGeneratorHell` / `MixinChunkGeneratorEnd` | `generateChunk` HEAD, cancellable | install a worker-built nether or end chunk |
-| `MixinWorldPipeline` | `getBiomeProvider` / `getPerWorldStorage` HEAD | per-worker biome provider; scratch structure save during verify |
+| `MixinMapGenStructure` | adds `MapGenBase.generate` | pipeline workers skip structure layout, except Atum's `MapGenPyramid` (matched by class name) |
+| `MixinChunkGeneratorHell` / `MixinChunkGeneratorEnd` | `generateChunk` HEAD, cancellable | install a worker-built vanilla nether or end chunk |
+| `mixin/dims/*` | late, each dimension generator's `func_185932_a` HEAD | install a worker chunk for NetherEx, Nether API, Aurorian, Atum, Twilight Forest, Aether, the Beneath |
+| `MixinWorldPipeline` | `getBiomeProvider` / `getPerWorldStorage` / `getSeaLevel` HEAD | worker's biome provider when the world's dimension matches the job; scratch structure save for workers and verify; Nether API's per-thread sea level |
+| `MixinWorldProviderPipeline` | `WorldProvider.getBiomeProvider` HEAD | the same dimension-checked worker biome provider, for generators that ask the provider |
+| `MixinIntCache` | `@Overwrite` of `IntCache.getIntCache` / `resetIntCache` / `getCacheSizes` | one cache per thread (vanilla's is one static pool, `synchronized`, reset by each user) |
+
+## Late mixins (one config per mod, `required: false`)
+
+`ChunkStewardLateMixinLoader` queues each config only when a mod jar contains its probe class; a source it cannot read is skipped. The generator mods are compile-only (`libs/mods`), so a pack without one of them only loses the pipeline for that generator.
+
+| Config | Mixins | Purpose |
+| --- | --- | --- |
+| `netherapi` | `MixinChunkGeneratorNether`, `MixinChunkGeneratorTheEnd`, `MixinAbstractNetherExBiome` | worker chunks; NetherEx biomes' `buildSurface` sets sea level on a per-thread, per-world value (`ThreadSeaLevel`, `@WrapMethod` with `finally`) instead of the shared `World` |
+| `endexpansion` | `MixinBiomeBarrendLands` (package `mixin.endexpansion`) | Barrend `buildSurface` takes `nextInt` from the generator's random, not the biome's shared one |
+| `aurorian` | `MixinAurorianChunkGenerator` | reseeds the generator random from the chunk position in `generateChunk` and `populate`, so order does not matter |
+| `betweenlands` | `MixinBiomeGenerator` and the nine noise features | noise buffers and the "noise generated" flag per thread (`ThreadNoise`); first `initializeGenerators` per thread runs under the generator's lock |
+| `atum` | `MixinChunkGeneratorAtum` | clones the 16×16 surface biomes after `getBiomes` and copies them back before `new Chunk`, so pyramid ground sampling's 10×10 write does not reach the chunk |
 | `MixinChunk` | `IChunkGenerator.func_185931_b` INVOKE, before and after, inside `func_186034_a` | generator populate timing (decoration and structure paste, apart from mod world generators) |
 | `MixinMinecraftServer` | `func_71217_p` HEAD/RETURN, `func_71267_a` HEAD | tick timing, save notice |
 

@@ -398,8 +398,8 @@ public class ChunkStewardConfig {
         public boolean verifyOnStart = false;
 
         @Config.Comment({"Generator classes allowed off-thread, and only in dimensions where that class has passed",
-                "pipeline verify 10000. This phase accepts net.minecraft.world.gen.ChunkGeneratorHell and",
-                "net.minecraft.world.gen.ChunkGeneratorEnd. Empty = no off-thread generation."})
+                "pipeline verify 10000. The class must be the one the dimension is running, not a parent.",
+                "Empty = no off-thread generation. RTG is rtg.world.gen.ChunkGeneratorRTG."})
         public String[] allowedGenerators = new String[0];
 
         @Config.Comment("Preload and stage 2 may queue terrain behind player chunks. They install a result only when it is finished.")

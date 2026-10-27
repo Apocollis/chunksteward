@@ -20,14 +20,16 @@ import java.util.Random;
  * HEAD/RETURN injects only.
  *
  * <p>Also adds the {@code generate} override {@code MapGenStructure} does not have, so a pipeline worker skips structure
- * layout. The server thread still calls through to {@code MapGenBase}.
+ * layout. The server thread still calls through to {@code MapGenBase}. Atum pyramids still lay out on a worker: Arcana
+ * Quest Tweaks smooths the primer around a pyramid during {@code generateChunk}, so the start has to exist by then.
  */
 @Mixin(MapGenStructure.class)
 public abstract class MixinMapGenStructure extends MapGenBase {
+    private static final String ATUM_PYRAMID = "com.teammetallurgy.atum.world.gen.structure.pyramid.MapGenPyramid";
 
     @Override
     public void generate(World world, int chunkX, int chunkZ, ChunkPrimer primer) {
-        if (PipelineMarker.worker()) {
+        if (PipelineMarker.worker() && !ATUM_PYRAMID.equals(((Object) this).getClass().getName())) {
             return;
         }
         super.generate(world, chunkX, chunkZ, primer);

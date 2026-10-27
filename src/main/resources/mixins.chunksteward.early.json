@@ -16,12 +16,14 @@
     "MixinChunkGeneratorHell",
     "MixinChunkProviderServer",
     "MixinGameRegistry",
+    "MixinIntCache",
     "MixinMapGenBase",
     "MixinMapGenStructure",
     "MixinMinecraftServer",
     "MixinPlayerChunkMap",
     "MixinPlayerChunkMapEntry",
     "MixinWorldPipeline",
+    "MixinWorldProviderPipeline",
     "MixinWorldServer"
   ]
 }

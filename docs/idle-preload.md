@@ -21,7 +21,8 @@ Direction comes from `PlayerMotion`: view direction when slow, travel direction 
 - chunks are waiting for any player (`TickMonitor.waitingNow()`, entries without a chunk): preload yields to demand;
 - `busyChunks` (6) chunks were generated in the last `busyWindowTicks` (100) by anything but preload (`TickMonitor.recentExternalGen`, counted at the terrain stage): the server is busy generating chunks players need; Chunks generated while held by a Forge ticket of a mod in `busyIgnoreMods` (default `roguelike`) are not counted: that is the mod's own build (a dungeon footprint, which Roguelike forces on its ticket right before loading each chunk), not player demand. Counted in the status log as `mod-ticket generation N`.
 - more than `maxPopulateBacklog` (4) populates are queued ([populate.md](populate.md));
-- the tick is over the tier's limit, a save is pending, or the dimension is excluded.
+- the tick is over the tier's limit, a save is pending, or the dimension is excluded;
+- a pipeline verify has paused the player's dimension ([pipeline.md](pipeline.md)).
 
 The status log counts each yield (`yielded to demand/busy/populate backlog`).
 

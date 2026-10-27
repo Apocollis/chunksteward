@@ -128,7 +128,8 @@ public final class Stage2Pregen {
     }
 
     private static boolean eligible(EntityPlayerMP player) {
-        return !player.isSpectator() && Dimensions.applies(player.dimension) && IdlePreload.stage1Done(player)
+        return !player.isSpectator() && Dimensions.applies(player.dimension) && !TerrainPipeline.isPaused(player.dimension)
+                && IdlePreload.stage1Done(player)
                 && PlayerMotion.speed(player) <= ChunkStewardConfig.preload.movingMaxSpeed;
     }
 

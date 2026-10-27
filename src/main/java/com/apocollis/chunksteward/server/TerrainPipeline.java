@@ -29,8 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * Terrain pipeline. Workers generate vanilla nether and end chunks after that class has passed verify in the dimension.
- * An empty {@code allowedGenerators} list starts nothing.
+ * Terrain pipeline. Workers generate a listed generator after that class has passed verify in the dimension.
+ * An empty {@code allowedGenerators} list starts nothing. RTG is copied, and it still shares {@code RTGWorld}.
  */
 public final class TerrainPipeline {
     private static final Object LOCK = new Object();
@@ -105,6 +105,11 @@ public final class TerrainPipeline {
 
     static void pause(int dimension) {
         pausedDimension = dimension;
+    }
+
+    /** True while a verify holds this dimension. Stage 2 and preload skip it so the server thread is not a third writer. */
+    static boolean isPaused(int dimension) {
+        return pausedDimension == dimension;
     }
 
     static void resume(int dimension) {
@@ -270,7 +275,7 @@ public final class TerrainPipeline {
         for (int slot = 0; slot < count; slot++) {
             threads[slot] = startWorker(slot);
         }
-        ChunkSteward.LOGGER.info("pipeline workers started ({}); hell and end generate after a verify pass", count);
+        ChunkSteward.LOGGER.info("pipeline workers started ({}); a listed generator runs after a verify pass", count);
     }
 
     private static void stopWorkers() {
@@ -451,16 +456,19 @@ public final class TerrainPipeline {
                 noteUnsupported(main);
                 continue;
             }
-            if (PipelineGenerators.copyBiome(world) == null) {
-                noteUnsupported(main);
-                continue;
-            }
             int dimension = world.provider.getDimension();
             for (int slot = 0; slot < GENERATORS.size(); slot++) {
-                if (!GENERATORS.get(slot).containsKey(dimension)) {
-                    GENERATORS.get(slot).put(dimension, PipelineGenerators.copy(world, main));
-                    BIOMES.get(slot).put(dimension, PipelineGenerators.copyBiome(world));
+                if (GENERATORS.get(slot).containsKey(dimension)) {
+                    continue;
                 }
+                BiomeProvider biome = PipelineGenerators.copyBiome(world);
+                IChunkGenerator copy = PipelineGenerators.copy(world, main, biome);
+                if (biome == null || copy == null) {
+                    noteUnsupported(main);
+                    break;
+                }
+                GENERATORS.get(slot).put(dimension, copy);
+                BIOMES.get(slot).put(dimension, biome);
             }
         }
     }
@@ -482,7 +490,7 @@ public final class TerrainPipeline {
             return;
         }
         loggedUnsupported = true;
-        ChunkSteward.LOGGER.info("pipeline is not generating {}; this phase runs ChunkGeneratorHell and ChunkGeneratorEnd",
+        ChunkSteward.LOGGER.info("pipeline is not generating {}; no copy for this generator",
                 generator.getClass().getName());
     }
 
@@ -663,7 +671,7 @@ public final class TerrainPipeline {
             }
             Chunk[] held = new Chunk[1];
             PipelineMarker.set(true, false);
-            PipelineMarker.biome(biome);
+            PipelineMarker.biome(biome, job.dimension);
             try {
                 BedrockShim.run(world, () -> held[0] = generator.generateChunk(job.x, job.z));
                 if (held[0] == null) {
