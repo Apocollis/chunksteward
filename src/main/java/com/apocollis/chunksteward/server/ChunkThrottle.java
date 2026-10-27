@@ -1,6 +1,7 @@
 package com.apocollis.chunksteward.server;
 
 import com.apocollis.chunksteward.config.ChunkStewardConfig;
+import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMapEntry;
 import com.google.common.base.Predicate;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.management.PlayerChunkMap;
@@ -68,6 +69,9 @@ public final class ChunkThrottle {
             Diagnostics.sanity(entry, loaded);
             return provided(entry, loaded);
         }
+        if (TerrainPipeline.serving(map.getWorldServer())) {
+            return providePipelined(map, entry, debug);
+        }
         boolean bypass = false;
         String outcome = "admitted";
         if (!Dimensions.applies(map.getWorldServer().provider.getDimension())) {
@@ -99,6 +103,73 @@ public final class ChunkThrottle {
             Diagnostics.provide(outcome, map, entry, true);
         }
 
+        long start = System.nanoTime();
+        boolean provided = entry.providePlayerChunk(true);
+        long spent = System.nanoTime() - start;
+        TickMonitor.chunkNanos += spent;
+        if (provided) {
+            genCostEmaMs += 0.2 * (spent / 1.0e6 - genCostEmaMs);
+            TickMonitor.lastGenTick = TickMonitor.tick;
+            TickMonitor.generatedThisTick++;
+            TickMonitor.countGenerated();
+        }
+        Diagnostics.sanity(entry, provided);
+        return provided(entry, provided);
+    }
+
+    /**
+     * A dimension whose generator has passed verify. A chunk Forge is already loading is not published. Ordinary chunks
+     * wait for a worker result. Emergency, warmup, and the starvation guard still generate on the server thread.
+     */
+    private static boolean providePipelined(PlayerChunkMap map, PlayerChunkMapEntry entry, boolean debug) {
+        if (((AccessorPlayerChunkMapEntry) entry).chunksteward$loading()) {
+            if (debug) {
+                Diagnostics.provide("deferred: loading", map, entry, true);
+            }
+            return false;
+        }
+        boolean urgent = urgent(entry);
+        if (!urgent && TickMonitor.savePaused()) {
+            TickMonitor.countSkipped();
+            if (debug) {
+                Diagnostics.provide("deferred: save", map, entry, true);
+            }
+            return false;
+        }
+        boolean finished = TerrainPipeline.ready(map.getWorldServer(), entry.getPos().x, entry.getPos().z);
+        if (!urgent && !finished && !starvationDue()) {
+            TickMonitor.countSkipped();
+            if (debug) {
+                Diagnostics.provide("deferred: pipeline", map, entry, true);
+            }
+            return false;
+        }
+        if (!urgent && finished && !withinBudget()) {
+            TickMonitor.countSkipped();
+            if (debug) {
+                Diagnostics.provide("deferred: headroom", map, entry, true);
+            }
+            return false;
+        }
+        if (urgent) {
+            TickMonitor.countBypassed();
+        }
+        if (debug) {
+            Diagnostics.provide(finished ? "admitted: pipeline" : "admitted", map, entry, true);
+        }
+        return timeProvide(entry);
+    }
+
+    static boolean urgent(PlayerChunkMapEntry entry) {
+        return isEmergency(entry) || Warmup.isWarm(entry);
+    }
+
+    private static boolean starvationDue() {
+        return TickMonitor.generatedThisTick == 0
+                && TickMonitor.ticksSince(TickMonitor.lastGenTick) >= ChunkStewardConfig.throttle.maxStarveTicks;
+    }
+
+    private static boolean timeProvide(PlayerChunkMapEntry entry) {
         long start = System.nanoTime();
         boolean provided = entry.providePlayerChunk(true);
         long spent = System.nanoTime() - start;

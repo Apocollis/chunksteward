@@ -2,29 +2,58 @@ package com.apocollis.chunksteward.server;
 
 import com.apocollis.chunksteward.ChunkSteward;
 import com.apocollis.chunksteward.config.ChunkStewardConfig;
+import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMap;
+import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMapEntry;
 import com.sun.management.OperatingSystemMXBean;
+import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
+import net.minecraft.world.biome.BiomeProvider;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.gen.IChunkGenerator;
+import net.minecraft.server.management.PlayerChunkMapEntry;
+import net.minecraftforge.common.DimensionManager;
+import net.minecraftforge.fml.common.Loader;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * Terrain pipeline infrastructure. This build does not generate chunks. Workers start only when {@code pipeline.enabled}
- * is on, the session kill switch is clear, and {@code allowedGenerators} lists a class. With the default empty list
- * there are no threads, no samples, and no change to loading.
+ * Terrain pipeline. Workers generate vanilla nether and end chunks after that class has passed verify in the dimension.
+ * An empty {@code allowedGenerators} list starts nothing.
  */
-final class TerrainPipeline {
+public final class TerrainPipeline {
     private static final Object LOCK = new Object();
     private static final Thread[] NO_THREADS = new Thread[0];
-    private static final int[] NO_RANKS = new int[0];
+    private static final PipelineJob[] NO_JOBS = new PipelineJob[0];
 
     private static final PipelineTable TABLE = new PipelineTable();
     private static final PipelineCpuGuard GUARD = new PipelineCpuGuard();
+    private static final ConcurrentHashMap<PipelineKey, Chunk> CHUNKS = new ConcurrentHashMap<PipelineKey, Chunk>();
+    private static final Set<String> DISALLOWED = ConcurrentHashMap.newKeySet();
+    private static final ConcurrentHashMap<String, Integer> FAILURES = new ConcurrentHashMap<String, Integer>();
+    private static final List<ConcurrentHashMap<Integer, IChunkGenerator>> GENERATORS = new ArrayList<ConcurrentHashMap<Integer, IChunkGenerator>>();
+    private static final List<ConcurrentHashMap<Integer, BiomeProvider>> BIOMES = new ArrayList<ConcurrentHashMap<Integer, BiomeProvider>>();
 
     private static volatile boolean killed;
     private static volatile boolean run;
-    private static volatile int[] ranks = NO_RANKS;
+    private static volatile boolean loliBlocked;
+    private static volatile int pausedDimension = Integer.MIN_VALUE;
+    private static volatile PipelineJob[] snapshot = NO_JOBS;
+    private static final AtomicInteger CURSOR = new AtomicInteger();
     private static Thread[] threads = NO_THREADS;
+    private static boolean[] retire = new boolean[0];
+    private static boolean loggedUnsupported;
 
     private static final double RATIO_ALPHA = 0.02;
 
@@ -43,12 +72,9 @@ final class TerrainPipeline {
     private TerrainPipeline() {
     }
 
-    /**
-     * True only while workers are producing terrain. This build never generates, so this stays false even when stub
-     * workers are parked.
-     */
+    /** True while a passed dimension is allowed to take worker terrain and the cap is above 0. */
     static boolean isPipelineActive() {
-        return false;
+        return run && !killed && !loliBlocked && GUARD.cap() > 0 && PipelinePasses.any();
     }
 
     static PipelineTable table() {
@@ -60,12 +86,51 @@ final class TerrainPipeline {
             killed = false;
             stopWorkers();
             TABLE.clear();
-            ranks = NO_RANKS;
+            CHUNKS.clear();
+            GENERATORS.clear();
+            BIOMES.clear();
+            DISALLOWED.clear();
+            FAILURES.clear();
+            snapshot = NO_JOBS;
+            CURSOR.set(0);
+            pausedDimension = Integer.MIN_VALUE;
+            PipelinePasses.reset();
             GUARD.reset(1);
             sampling = false;
             wallAccum = 0L;
             ratioEma = 0.0;
             ratioPrimed = false;
+        }
+    }
+
+    static void pause(int dimension) {
+        pausedDimension = dimension;
+    }
+
+    static void resume(int dimension) {
+        if (pausedDimension == dimension) {
+            pausedDimension = Integer.MIN_VALUE;
+        }
+    }
+
+    static void allow(String className) {
+        DISALLOWED.remove(className);
+    }
+
+    static void disallow(String className) {
+        DISALLOWED.add(className);
+    }
+
+    public static void onDimensionUnloaded(int dimension) {
+        synchronized (LOCK) {
+            TABLE.bumpEpoch(dimension);
+            dropChunks(dimension);
+            for (ConcurrentHashMap<Integer, IChunkGenerator> generators : GENERATORS) {
+                generators.remove(dimension);
+            }
+            for (ConcurrentHashMap<Integer, BiomeProvider> biomes : BIOMES) {
+                biomes.remove(dimension);
+            }
         }
     }
 
@@ -96,7 +161,13 @@ final class TerrainPipeline {
                 return;
             }
             startIfEngaged();
-            if (!run || TickMonitor.savePaused()) {
+            if (run) {
+                ensureGenerators();
+                rank();
+                watchdog();
+                replaceRetired();
+            }
+            if (!run || loliBlocked || !PipelinePasses.any() || TickMonitor.savePaused()) {
                 sampling = false;
                 return;
             }
@@ -145,19 +216,11 @@ final class TerrainPipeline {
         }
     }
 
-    /** Ranked indexes, highest score first, capped at {@code maxInFlight}. Nothing publishes scores in this build. */
-    static int[] publishScores(int[] scores) {
-        int[] ranked = PipelineRank.top(scores, Math.max(1, ChunkStewardConfig.pipeline.maxInFlight));
-        ranks = ranked;
-        return ranked;
-    }
-
-    static int[] ranks() {
-        return ranks;
-    }
-
     static String summary() {
         ChunkStewardConfig.Pipeline pipeline = ChunkStewardConfig.pipeline;
+        if (loliBlocked) {
+            return "pipeline off (LoliASM makeEventsSingletons)";
+        }
         if (!pipeline.enabled) {
             return "pipeline off (config)";
         }
@@ -168,13 +231,14 @@ final class TerrainPipeline {
             return "pipeline idle (no generators listed)";
         }
         return "pipeline workers " + threads.length + ", cap " + GUARD.cap()
-                + ", generation not started, queued " + TABLE.count(PipelineJob.QUEUED)
+                + ", queued " + TABLE.count(PipelineJob.QUEUED)
                 + ", in flight " + (TABLE.count(PipelineJob.CLAIMED_WORKER) + TABLE.count(PipelineJob.CLAIMED_MAIN))
                 + ", ready " + TABLE.readyCount()
                 + ", stolen " + TABLE.stolen.get()
                 + ", installed " + TABLE.installed.get()
                 + ", discarded " + TABLE.discarded.get()
-                + ", failed " + TABLE.failed.get();
+                + ", failed " + TABLE.failed.get()
+                + "; verify " + PipelineVerify.status();
     }
 
     private static boolean engaged() {
@@ -186,25 +250,27 @@ final class TerrainPipeline {
         if (run || !engaged()) {
             return;
         }
+        checkLoli();
+        if (loliBlocked) {
+            return;
+        }
         prepareSignal();
         int count = PipelineGate.resolveWorkers(ChunkStewardConfig.pipeline.workers,
                 Runtime.getRuntime().availableProcessors());
         GUARD.reset(count);
+        GENERATORS.clear();
+        BIOMES.clear();
+        for (int slot = 0; slot < count; slot++) {
+            GENERATORS.add(new ConcurrentHashMap<Integer, IChunkGenerator>());
+            BIOMES.add(new ConcurrentHashMap<Integer, BiomeProvider>());
+        }
+        retire = new boolean[count];
         run = true;
-        Thread[] started = new Thread[count];
-        ClassLoader loader = ChunkSteward.class.getClassLoader();
-        for (int i = 0; i < count; i++) {
-            Thread thread = new Thread(new Worker(), "chunksteward-terrain-" + i);
-            thread.setDaemon(true);
-            thread.setPriority(Thread.NORM_PRIORITY - 1);
-            thread.setContextClassLoader(loader);
-            started[i] = thread;
+        threads = new Thread[count];
+        for (int slot = 0; slot < count; slot++) {
+            threads[slot] = startWorker(slot);
         }
-        threads = started;
-        for (Thread thread : started) {
-            thread.start();
-        }
-        ChunkSteward.LOGGER.info("pipeline workers started ({}); this build does not generate off-thread", count);
+        ChunkSteward.LOGGER.info("pipeline workers started ({}); hell and end generate after a verify pass", count);
     }
 
     private static void stopWorkers() {
@@ -283,12 +349,337 @@ final class TerrainPipeline {
                 pipeline.cpuGuardResumeSeconds * 1000L, pipeline.cpuGuardSeconds * 1000L);
     }
 
-    /** Parks until the session stops it. It does not call a generator. */
+    /**
+     * Called from a whitelisted generator's {@code generateChunk}. A worker or verify thread runs the body. On the server
+     * thread a finished worker chunk is installed, and a queued chunk is claimed for synchronous generation.
+     */
+    public static Chunk takeGenerated(IChunkGenerator generator, int x, int z) {
+        if (PipelineMarker.worker() || PipelineMarker.verify()) {
+            return null;
+        }
+        World world = PipelineGenerators.worldOf(generator);
+        if (world == null || !serving(world)) {
+            return null;
+        }
+        int dimension = world.provider.getDimension();
+        PipelineKey key = new PipelineKey(dimension, x, z);
+        Chunk installed = install(generator, dimension, x, z, key);
+        if (installed != null) {
+            return installed;
+        }
+        PipelineJob job = TABLE.jobAt(dimension, x, z);
+        if (job != null && job.state.get() == PipelineJob.CLAIMED_WORKER) {
+            long deadline = System.nanoTime() + ChunkStewardConfig.pipeline.stealWaitMs * 1_000_000L;
+            while (job.state.get() == PipelineJob.CLAIMED_WORKER && System.nanoTime() < deadline) {
+                LockSupport.parkNanos(1_000_000L);
+            }
+            installed = install(generator, dimension, x, z, key);
+            if (installed != null) {
+                return installed;
+            }
+            TABLE.steal(job);
+            return null;
+        }
+        if (job == null || job.state.get() != PipelineJob.QUEUED) {
+            job = TABLE.submit(dimension, x, z);
+        }
+        TABLE.claimMain(job);
+        return null;
+    }
+
+    static boolean serving(World world) {
+        if (!run || killed || loliBlocked || GUARD.cap() <= 0 || world == null) {
+            return false;
+        }
+        int dimension = world.provider.getDimension();
+        if (dimension == pausedDimension || !Dimensions.applies(dimension)) {
+            return false;
+        }
+        IChunkGenerator generator = PipelineGenerators.of(world);
+        if (!PipelineGenerators.supported(generator) || !PipelineGenerators.listed(generator)) {
+            noteUnsupported(generator);
+            return false;
+        }
+        String className = generator.getClass().getName();
+        return !DISALLOWED.contains(className) && PipelinePasses.passed(dimension, className);
+    }
+
+    static boolean ready(World world, int x, int z) {
+        if (world == null) {
+            return false;
+        }
+        int dimension = world.provider.getDimension();
+        PipelineJob job = TABLE.readyAt(dimension, x, z);
+        return job != null && job.epoch == TABLE.epoch(dimension) && job.state.get() == PipelineJob.DONE
+                && CHUNKS.containsKey(new PipelineKey(dimension, x, z));
+    }
+
+    private static Chunk install(IChunkGenerator generator, int dimension, int x, int z, PipelineKey key) {
+        PipelineJob job = TABLE.readyAt(dimension, x, z);
+        if (job == null || job.epoch != TABLE.epoch(dimension) || job.state.get() != PipelineJob.DONE) {
+            return null;
+        }
+        Chunk chunk = CHUNKS.get(key);
+        if (chunk == null) {
+            return null;
+        }
+        try {
+            generator.recreateStructures(chunk, x, z);
+        } catch (RuntimeException failed) {
+            CHUNKS.remove(key, chunk);
+            ChunkSteward.LOGGER.warn("pipeline install failed at {}, {} in {}", x, z, dimension, failed);
+            return null;
+        }
+        if (!CHUNKS.remove(key, chunk)) {
+            return null;
+        }
+        TABLE.takeReady(dimension, x, z);
+        return chunk;
+    }
+
+    private static void ensureGenerators() {
+        PipelinePasses.ensureLoaded();
+        for (WorldServer world : DimensionManager.getWorlds()) {
+            if (!serving(world) && !listedPassed(world)) {
+                continue;
+            }
+            if (world.provider.getDimension() == pausedDimension) {
+                continue;
+            }
+            IChunkGenerator main = PipelineGenerators.of(world);
+            if (!PipelineGenerators.supported(main) || !PipelineGenerators.listed(main)) {
+                noteUnsupported(main);
+                continue;
+            }
+            if (PipelineGenerators.copyBiome(world) == null) {
+                noteUnsupported(main);
+                continue;
+            }
+            int dimension = world.provider.getDimension();
+            for (int slot = 0; slot < GENERATORS.size(); slot++) {
+                if (!GENERATORS.get(slot).containsKey(dimension)) {
+                    GENERATORS.get(slot).put(dimension, PipelineGenerators.copy(world, main));
+                    BIOMES.get(slot).put(dimension, PipelineGenerators.copyBiome(world));
+                }
+            }
+        }
+    }
+
+    /** Passed and listed, including while the cap is 0 or verify has this dimension paused. */
+    private static boolean listedPassed(World world) {
+        IChunkGenerator generator = PipelineGenerators.of(world);
+        if (!PipelineGenerators.supported(generator) || !PipelineGenerators.listed(generator)) {
+            return false;
+        }
+        return PipelinePasses.passed(world.provider.getDimension(), generator.getClass().getName());
+    }
+
+    private static void noteUnsupported(IChunkGenerator generator) {
+        if (loggedUnsupported || generator == null || PipelineGenerators.supported(generator)) {
+            return;
+        }
+        if (!PipelineGenerators.listed(generator)) {
+            return;
+        }
+        loggedUnsupported = true;
+        ChunkSteward.LOGGER.info("pipeline is not generating {}; this phase runs ChunkGeneratorHell and ChunkGeneratorEnd",
+                generator.getClass().getName());
+    }
+
+    private static void rank() {
+        if (!run || GUARD.cap() <= 0) {
+            snapshot = NO_JOBS;
+            CURSOR.set(0);
+            return;
+        }
+        List<Scored> found = new ArrayList<Scored>();
+        for (WorldServer world : DimensionManager.getWorlds()) {
+            if (!serving(world)) {
+                continue;
+            }
+            int dimension = world.provider.getDimension();
+            List<PlayerChunkMapEntry> entries = ((AccessorPlayerChunkMap) world.getPlayerChunkMap())
+                    .chunksteward$getEntriesWithoutChunks();
+            for (PlayerChunkMapEntry entry : entries) {
+                if (entry.getChunk() != null || ((AccessorPlayerChunkMapEntry) entry).chunksteward$loading()) {
+                    continue;
+                }
+                double score = DirectionalOrder.demandScore(entry);
+                if (ChunkThrottle.urgent(entry)) {
+                    score -= 1.0e18;
+                }
+                found.add(new Scored(dimension, entry.getPos().x, entry.getPos().z, score));
+            }
+        }
+        found.sort(Comparator.comparingDouble(scored -> scored.score));
+        int limit = Math.max(1, ChunkStewardConfig.pipeline.maxInFlight);
+        if (found.size() > limit) {
+            found = found.subList(0, limit);
+        }
+        Set<PipelineKey> keep = new HashSet<PipelineKey>();
+        PipelineJob[] ranked = new PipelineJob[found.size()];
+        for (int i = 0; i < found.size(); i++) {
+            Scored scored = found.get(i);
+            ranked[i] = TABLE.submit(scored.dimension, scored.x, scored.z);
+            keep.add(new PipelineKey(scored.dimension, scored.x, scored.z));
+        }
+        TABLE.dropQueuedExcept(keep);
+        snapshot = ranked;
+        CURSOR.set(0);
+    }
+
+    private static void watchdog() {
+        long limit = ChunkStewardConfig.pipeline.jobTimeoutSeconds * 1_000_000_000L;
+        long now = System.nanoTime();
+        for (PipelineJob job : TABLE.claimedByWorkers()) {
+            if (job.claimedNanos == 0L || now - job.claimedNanos < limit) {
+                continue;
+            }
+            if (!TABLE.steal(job)) {
+                continue;
+            }
+            CHUNKS.remove(new PipelineKey(job.dimension, job.x, job.z));
+            if (job.workerSlot >= 0 && job.workerSlot < retire.length) {
+                retire[job.workerSlot] = true;
+            }
+            TABLE.failed.incrementAndGet();
+            noteFailure(job);
+        }
+    }
+
+    private static void noteFailure(PipelineJob job) {
+        WorldServer world = DimensionManager.getWorld(job.dimension);
+        IChunkGenerator generator = world == null ? null : PipelineGenerators.of(world);
+        if (generator == null) {
+            return;
+        }
+        String className = generator.getClass().getName();
+        int count = FAILURES.merge(className, 1, Integer::sum);
+        if (count >= ChunkStewardConfig.pipeline.maxFailures) {
+            disallow(className);
+            ChunkSteward.LOGGER.warn("pipeline disabled {} after {} failures", className, count);
+        }
+    }
+
+    private static void replaceRetired() {
+        for (int slot = 0; slot < threads.length; slot++) {
+            if (!retire[slot] || threads[slot].isAlive()) {
+                continue;
+            }
+            retire[slot] = false;
+            threads[slot] = startWorker(slot);
+        }
+    }
+
+    private static void dropChunks(int dimension) {
+        for (PipelineKey key : new ArrayList<PipelineKey>(CHUNKS.keySet())) {
+            if (key.dimension == dimension) {
+                CHUNKS.remove(key);
+            }
+        }
+    }
+
+    private static void checkLoli() {
+        if (loliBlocked) {
+            return;
+        }
+        try {
+            java.nio.file.Path cfg = Loader.instance().getConfigDir().toPath().resolve("loliasm.cfg");
+            if (!Files.isRegularFile(cfg)) {
+                return;
+            }
+            String text = new String(Files.readAllBytes(cfg), StandardCharsets.UTF_8);
+            if (text.contains("makeEventsSingletons=true")) {
+                loliBlocked = true;
+                ChunkSteward.LOGGER.warn("pipeline off: LoliASM makeEventsSingletons is true");
+            }
+        } catch (IOException failed) {
+            ChunkSteward.LOGGER.warn("pipeline could not read loliasm.cfg", failed);
+        }
+    }
+
+    private static Thread startWorker(int slot) {
+        Thread thread = new Thread(new Worker(slot), "chunksteward-terrain-" + slot);
+        thread.setDaemon(true);
+        thread.setPriority(Thread.NORM_PRIORITY - 1);
+        thread.setContextClassLoader(ChunkSteward.class.getClassLoader());
+        thread.start();
+        return thread;
+    }
+
+    private static final class Scored {
+        final int dimension;
+        final int x;
+        final int z;
+        final double score;
+
+        Scored(int dimension, int x, int z, double score) {
+            this.dimension = dimension;
+            this.x = x;
+            this.z = z;
+            this.score = score;
+        }
+    }
+
     private static final class Worker implements Runnable {
+        private final int slot;
+
+        Worker(int slot) {
+            this.slot = slot;
+        }
+
         @Override
         public void run() {
-            while (run) {
-                LockSupport.parkNanos(50_000_000L);
+            while (run && (slot >= retire.length || !retire[slot])) {
+                PipelineJob[] jobs = snapshot;
+                int cap = GUARD.cap();
+                if (slot >= cap || jobs.length == 0 || TABLE.readyCount() >= ChunkStewardConfig.pipeline.maxReady) {
+                    LockSupport.parkNanos(50_000_000L);
+                    continue;
+                }
+                int index = CURSOR.getAndIncrement();
+                if (index < 0 || index >= jobs.length) {
+                    LockSupport.parkNanos(50_000_000L);
+                    continue;
+                }
+                PipelineJob job = jobs[index];
+                if (!TABLE.claimWorker(job)) {
+                    continue;
+                }
+                job.claimedNanos = System.nanoTime();
+                job.workerSlot = slot;
+                generate(job);
+            }
+        }
+
+        private void generate(PipelineJob job) {
+            IChunkGenerator generator = GENERATORS.get(slot).get(job.dimension);
+            BiomeProvider biome = BIOMES.get(slot).get(job.dimension);
+            WorldServer world = DimensionManager.getWorld(job.dimension);
+            if (generator == null || biome == null || world == null) {
+                TABLE.fail(job);
+                noteFailure(job);
+                return;
+            }
+            Chunk[] held = new Chunk[1];
+            PipelineMarker.set(true, false);
+            PipelineMarker.biome(biome);
+            try {
+                BedrockShim.run(world, () -> held[0] = generator.generateChunk(job.x, job.z));
+                if (held[0] == null) {
+                    throw new IllegalStateException("generateChunk returned null");
+                }
+                PipelineKey key = new PipelineKey(job.dimension, job.x, job.z);
+                CHUNKS.put(key, held[0]);
+                if (!TABLE.publish(job)) {
+                    CHUNKS.remove(key, held[0]);
+                }
+            } catch (Throwable failed) {
+                TABLE.fail(job);
+                noteFailure(job);
+                ChunkSteward.LOGGER.warn("pipeline worker failed at {}, {} in {}", job.x, job.z, job.dimension, failed);
+            } finally {
+                PipelineMarker.clear();
             }
         }
     }

@@ -18,6 +18,7 @@
 | `log <seconds>` | sets the status log interval for this session (0 = off); not saved to the config |
 | `pregen pause` / `pregen resume` | pauses or resumes preload and stage 2 for this session, to rule them out |
 | `pipeline status` / `pipeline off` / `pipeline on` | pipeline state. `off` stops it for this session; `on` clears that. With no generator class listed it stays idle either way. See [pipeline.md](pipeline.md) |
+| `pipeline verify <count> [dimension]` | compares worker-shaped and reference terrain for `ChunkGeneratorHell` or `ChunkGeneratorEnd`. 10000 clean chunks records a pass for that dimension. The dimension must be loaded |
 
 ## Hotspots
 

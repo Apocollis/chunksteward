@@ -15,6 +15,8 @@ final class PipelineJob {
     final int z;
     final int epoch;
     final AtomicInteger state = new AtomicInteger(QUEUED);
+    volatile long claimedNanos;
+    volatile int workerSlot = -1;
 
     PipelineJob(int dimension, int x, int z, int epoch) {
         this.dimension = dimension;

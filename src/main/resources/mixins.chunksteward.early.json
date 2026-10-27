@@ -6,8 +6,14 @@
   "package": "com.apocollis.chunksteward.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "AccessorChunkGeneratorEnd",
+    "AccessorChunkGeneratorHell",
+    "AccessorMapGenStructure",
     "AccessorPlayerChunkMap",
+    "AccessorPlayerChunkMapEntry",
     "MixinChunk",
+    "MixinChunkGeneratorEnd",
+    "MixinChunkGeneratorHell",
     "MixinChunkProviderServer",
     "MixinGameRegistry",
     "MixinMapGenBase",
@@ -15,6 +21,7 @@
     "MixinMinecraftServer",
     "MixinPlayerChunkMap",
     "MixinPlayerChunkMapEntry",
+    "MixinWorldPipeline",
     "MixinWorldServer"
   ]
 }

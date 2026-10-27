@@ -1,6 +1,6 @@
 # Chunk Steward — Architecture
 
-Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk, and it does not make worldgen async (populate and every `IWorldGenerator` write to the live world).
+Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk. Vanilla nether and end terrain can move off the server thread after a verify pass ([pipeline.md](pipeline.md)). Populate and every `IWorldGenerator` stay on the server thread.
 
 Formerly Lazy Chunks 1.12 (modid `lazychunks`); renamed to Chunk Steward (modid `chunksteward`) when the scope grew past chunk loading. Credits and licence notes: [../NOTICE.md](../NOTICE.md).
 
@@ -45,6 +45,9 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 | `MixinGameRegistry` | `@Redirect` of `IWorldGenerator.generate` inside Forge `GameRegistry.generateWorld` (`remap = false`) | per-generator timing |
 | `MixinMapGenBase` | `MapGenBase.func_186125_a` HEAD/RETURN | terrain-stage map-gen timing by class (caves, ravines, structure layout) |
 | `MixinMapGenStructure` | `MapGenStructure.func_175794_a` HEAD/RETURN | structure paste timing by class (inside populate) |
+| `MixinMapGenStructure` | adds `MapGenBase.generate` | pipeline workers skip structure layout |
+| `MixinChunkGeneratorHell` / `MixinChunkGeneratorEnd` | `generateChunk` HEAD, cancellable | install a worker-built nether or end chunk |
+| `MixinWorldPipeline` | `getBiomeProvider` / `getPerWorldStorage` HEAD | per-worker biome provider; scratch structure save during verify |
 | `MixinChunk` | `IChunkGenerator.func_185931_b` INVOKE, before and after, inside `func_186034_a` | generator populate timing (decoration and structure paste, apart from mod world generators) |
 | `MixinMinecraftServer` | `func_71217_p` HEAD/RETURN, `func_71267_a` HEAD | tick timing, save notice |
 

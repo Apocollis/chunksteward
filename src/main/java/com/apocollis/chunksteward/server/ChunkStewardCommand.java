@@ -45,7 +45,7 @@ public class ChunkStewardCommand extends CommandBase {
     @Override
     public String getUsage(ICommandSender sender) {
         return "/chunksteward <status | chunkinfo [x z] | queue | holds | log <seconds> | pregen <pause|resume>"
-                + " | pipeline <status|off|on> | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
+                + " | pipeline <status|off|on|verify <count> [dimension]> | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
     }
 
     @Override
@@ -78,7 +78,7 @@ public class ChunkStewardCommand extends CommandBase {
                 pregen(sender, args);
                 break;
             case "pipeline":
-                pipeline(sender, args);
+                pipeline(server, sender, args);
                 break;
             case "hotspots":
                 hotspots(server, sender, args);
@@ -101,7 +101,7 @@ public class ChunkStewardCommand extends CommandBase {
             return getListOfStringsMatchingLastWord(args, "pause", "resume");
         }
         if (args.length == 2 && "pipeline".equalsIgnoreCase(args[0])) {
-            return getListOfStringsMatchingLastWord(args, "status", "off", "on");
+            return getListOfStringsMatchingLastWord(args, "status", "off", "on", "verify");
         }
         return Collections.emptyList();
     }
@@ -161,9 +161,9 @@ public class ChunkStewardCommand extends CommandBase {
         send(sender, TerrainPipeline.summary());
     }
 
-    private static void pipeline(ICommandSender sender, String[] args) throws CommandException {
+    private static void pipeline(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException {
         if (args.length < 2) {
-            throw new WrongUsageException("/chunksteward pipeline <status|off|on>");
+            throw new WrongUsageException("/chunksteward pipeline <status|off|on|verify <count> [dimension]>");
         }
         switch (args[1].toLowerCase()) {
             case "status":
@@ -177,9 +177,38 @@ public class ChunkStewardCommand extends CommandBase {
                 TerrainPipeline.setKilled(false);
                 send(sender, TerrainPipeline.summary(), TextFormatting.GREEN);
                 break;
+            case "verify":
+                verify(server, sender, args);
+                break;
             default:
-                throw new WrongUsageException("/chunksteward pipeline <status|off|on>");
+                throw new WrongUsageException("/chunksteward pipeline <status|off|on|verify <count> [dimension]>");
         }
+    }
+
+    private static void verify(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException {
+        if (args.length < 3) {
+            throw new WrongUsageException("/chunksteward pipeline verify <count> [dimension]");
+        }
+        int count = parseInt(args[2], 1, 20000);
+        WorldServer world = worldOf(server, sender);
+        if (args.length >= 4) {
+            WorldServer named = server.getWorld(parseInt(args[3]));
+            if (named == null) {
+                send(sender, "dimension " + args[3] + " is not loaded", TextFormatting.RED);
+                return;
+            }
+            world = named;
+        }
+        if (PipelineVerify.running()) {
+            send(sender, "pipeline verify already running. " + PipelineVerify.status(), TextFormatting.YELLOW);
+            return;
+        }
+        if (!PipelineVerify.start(world, count)) {
+            send(sender, PipelineVerify.status(), TextFormatting.RED);
+            return;
+        }
+        send(sender, "pipeline verify started: " + count + " chunks in dimension " + world.provider.getDimension()
+                + ". A pass needs 10000 clean chunks. " + PipelineVerify.status(), TextFormatting.GREEN);
     }
 
     // ---- chunkinfo ------------------------------------------------------------------------------------------------

@@ -10,6 +10,7 @@
 | Admission factor in game | At measured TPS >= 19, chunks admit as in 1.0. Under 19 the status line's admission factor falls with TPS and the headroom shrinks; at 10 only the starvation rate remains. `getLoadFactor` still reaches 0 at 15 | not run |
 | Pipeline job, rank, and CPU-guard math | `PipelineTest`: empty whitelist does not engage, worker count, claim/publish/steal, epoch drop, guard step and probation | passed: 2026-10-26 (`.\gradlew.bat test build`, 10 tests). Jar deployed to DEVBOX the same night; not copied to the server |
 | Pipeline idle matches 1.1 | `pipeline.enabled` true with an empty `allowedGenerators`: no worker threads, status log unchanged, chunks load as before. `enabled` false is the same code path and was not its own session | passed: 2026-10-26 DEVBOX. Server start 23:21, `pipeline.enabled=true`, `allowedGenerators` empty, no `pipeline workers started` line, status log format unchanged, chunks generated and deferred on the existing throttle. No chunksteward errors |
+| Pipeline hell and end | `pipeline verify 10000` clean in the nether and the end, then those class names added to `allowedGenerators`. Player chunks in that dimension install worker terrain; a mismatch disables the class | not run. Built 2026-10-27 (`.\gradlew.bat test build`). Not copied to DEVBOX or the server |
 
 ## 1.0
 

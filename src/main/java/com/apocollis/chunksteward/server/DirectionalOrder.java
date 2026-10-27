@@ -82,6 +82,13 @@ public final class DirectionalOrder {
         }
     }
 
+    /** Lowest score is the chunk the order would offer first. Server thread only. */
+    static double demandScore(PlayerChunkMapEntry entry) {
+        ChunkStewardConfig.Ordering cfg = ChunkStewardConfig.ordering;
+        penalty = cfg.enabled ? cfg.directionPenalty : 0.0;
+        return score(entry);
+    }
+
     private static double score(PlayerChunkMapEntry entry) {
         ChunkPos pos = entry.getPos();
         chunkCenterX = pos.x * 16 + 8;

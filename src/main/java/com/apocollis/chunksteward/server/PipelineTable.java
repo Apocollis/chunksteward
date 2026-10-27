@@ -105,8 +105,39 @@ final class PipelineTable {
         failed.incrementAndGet();
     }
 
+    PipelineJob jobAt(int dimension, int x, int z) {
+        return jobs.get(new PipelineKey(dimension, x, z));
+    }
+
     PipelineJob readyAt(int dimension, int x, int z) {
         return ready.get(new PipelineKey(dimension, x, z));
+    }
+
+    /** Drops queued jobs that fell out of the ranked window. A claimed job is left to finish. */
+    void dropQueuedExcept(java.util.Set<PipelineKey> keep) {
+        List<PipelineKey> drop = new ArrayList<PipelineKey>();
+        for (java.util.Map.Entry<PipelineKey, PipelineJob> entry : jobs.entrySet()) {
+            if (entry.getValue().state.get() == PipelineJob.QUEUED && !keep.contains(entry.getKey())) {
+                drop.add(entry.getKey());
+            }
+        }
+        for (PipelineKey key : drop) {
+            PipelineJob job = jobs.get(key);
+            if (job != null && job.state.compareAndSet(PipelineJob.QUEUED, PipelineJob.CANCELLED)) {
+                jobs.remove(key, job);
+                discarded.incrementAndGet();
+            }
+        }
+    }
+
+    List<PipelineJob> claimedByWorkers() {
+        List<PipelineJob> claimed = new ArrayList<PipelineJob>();
+        for (PipelineJob job : jobs.values()) {
+            if (job.state.get() == PipelineJob.CLAIMED_WORKER) {
+                claimed.add(job);
+            }
+        }
+        return claimed;
     }
 
     /** Removes a ready result. Counts as installed when the caller kept it. */
