@@ -51,6 +51,10 @@ final class LightVerify {
         long skyLower = 0;
         long blockLower = 0;
         int shown = 0;
+        long blockMissed = 0;
+        long blockBoth = 0;
+        int chunksWithDifferences = 0;
+        int examplesThisChunk;
         for (Chunk center : candidates) {
             if (checked >= count || System.nanoTime() - started > 6_000_000_000L) {
                 break;
@@ -71,6 +75,8 @@ final class LightVerify {
                 }
             }, center.x, center.z, 0, null);
             checked++;
+            examplesThisChunk = 0;
+            long diffBefore = skyDiff + blockDiff;
             for (int dx = 0; dx < 2; dx++) {
                 for (int dz = 0; dz < 2; dz++) {
                     Chunk chunk = window.get(key(center.x + dx, center.z + dz));
@@ -106,33 +112,69 @@ final class LightVerify {
                                     blockDiff++;
                                     if (a < b) {
                                         blockLower++;
+                                    } else if (b == 0) {
+                                        blockMissed++;
+                                    } else {
+                                        blockBoth++;
                                     }
                                 }
-                                if (shown < 8) {
+                                if (shown < 14 && examplesThisChunk < 2) {
                                     shown++;
+                                    examplesThisChunk++;
                                     int lx = n & 15;
                                     int lz = n >> 4 & 15;
                                     int ly = n >> 8;
                                     BlockPos at = new BlockPos(chunk.x * 16 + lx, storage.getYLocation() + ly, chunk.z * 16 + lz);
                                     lines.add("  differs at " + at.getX() + "," + at.getY() + "," + at.getZ() + " "
                                             + (kind == 0 ? "sky" : "block") + ": worker " + a + ", stored " + b + ", block "
-                                            + chunk.getBlockState(at).getBlock().getRegistryName());
+                                            + chunk.getBlockState(at).getBlock().getRegistryName()
+                                            + (kind == 1 ? "; " + emitterNear(window, at) : ""));
                                 }
                             }
                         }
                     }
                 }
             }
+            if (skyDiff + blockDiff > diffBefore) {
+                chunksWithDifferences++;
+            }
         }
         double ms = (System.nanoTime() - started) / 1.0e6;
         lines.add(0, "light verify: " + checked + " chunks (2x2 each), " + cells + " nibbles compared in "
                 + String.format("%.0f", ms) + " ms (" + (checked == 0 ? "-" : String.format("%.0f", ms / checked))
                 + " ms per chunk including the compare); sky differs " + skyDiff + " (worker lower " + skyLower
-                + "), block differs " + blockDiff + " (worker lower " + blockLower + ")");
+                + "), block differs " + blockDiff + " (worker lower " + blockLower + ", worker lit where stored is 0 "
+                + blockMissed + ", both lit " + blockBoth + "); chunks with a difference " + chunksWithDifferences);
         if (checked == 0) {
             lines.add("  no chunk near you has its whole 4x4 window loaded, populated and light populated");
         }
         return lines;
+    }
+
+    /** The brightest emitting block within 15 blocks of {@code at}: a light source that explains the worker's value. */
+    private static String emitterNear(Map<Long, Chunk> window, BlockPos at) {
+        int best = 0;
+        String where = "no emitter within 15";
+        for (int dx = -15; dx <= 15; dx++) {
+            for (int dz = -15; dz <= 15; dz++) {
+                Chunk chunk = window.get(key((at.getX() + dx) >> 4, (at.getZ() + dz) >> 4));
+                if (chunk == null) {
+                    continue;
+                }
+                for (int dy = -15; dy <= 15; dy++) {
+                    BlockPos p = new BlockPos(at.getX() + dx, at.getY() + dy, at.getZ() + dz);
+                    IBlockState state = chunk.getBlockState(p);
+                    int emits = state.getLightValue(chunk.getWorld(), p);
+                    int reach = emits - (Math.abs(dx) + Math.abs(dy) + Math.abs(dz));
+                    if (reach > best) {
+                        best = reach;
+                        where = "nearest source " + state.getBlock().getRegistryName() + " emits " + emits + " at "
+                                + dx + "," + dy + "," + dz;
+                    }
+                }
+            }
+        }
+        return where;
     }
 
     private static int nibble(byte[] data, int index) {
