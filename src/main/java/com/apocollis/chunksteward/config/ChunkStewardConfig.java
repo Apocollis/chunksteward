@@ -2,6 +2,7 @@ package com.apocollis.chunksteward.config;
 
 import com.apocollis.chunksteward.ChunkSteward;
 import net.minecraftforge.common.config.Config;
+import net.minecraftforge.common.config.ConfigManager;
 
 @Config(modid = ChunkSteward.MODID, name = "chunksteward", category = "")
 public class ChunkStewardConfig {
@@ -370,7 +371,7 @@ public class ChunkStewardConfig {
 
         @Config.Comment({"Worker threads. 0 = max(1, min(2, available processors - 2)): 2 when at least four logical",
                 "processors are present, otherwise 1. A set value is clamped to 1 or 2. Threads start only when a",
-                "generator class is listed. This build does not generate off-thread."})
+                "generator class is listed."})
         @Config.RangeInt(min = 0, max = 2)
         public int workers = 0;
 
@@ -394,11 +395,11 @@ public class ChunkStewardConfig {
         @Config.RangeInt(min = 1, max = 20)
         public int maxFailures = 3;
 
-        @Config.Comment("Run the equivalence check at server start. Leave false until a class has passed it.")
+        @Config.Comment("Run the equivalence check at server start. Leave false. Verify is the command.")
         public boolean verifyOnStart = false;
 
-        @Config.Comment({"Generator classes allowed off-thread, and only in dimensions where that class has passed",
-                "pipeline verify 10000. The class must be the one the dimension is running, not a parent.",
+        @Config.Comment({"Generator classes allowed off-thread. The class must be the one the dimension is running, not a parent.",
+                "A listed class runs in every dimension that uses it. A clean verify of 10000 chunks adds the class.",
                 "Empty = no off-thread generation. RTG is rtg.world.gen.ChunkGeneratorRTG."})
         public String[] allowedGenerators = new String[0];
 
@@ -428,5 +429,18 @@ public class ChunkStewardConfig {
         @Config.Comment("Minimum seconds between worker-cap steps, down or up.")
         @Config.RangeInt(min = 1, max = 120)
         public int cpuGuardResumeSeconds = 10;
+    }
+
+    /**
+     * Stores a generator list built by the caller and writes {@code chunksteward.cfg}. The same array means the class
+     * was already listed.
+     */
+    public static void installAllowedGenerators(String[] next, String className) {
+        if (next == pipeline.allowedGenerators) {
+            return;
+        }
+        pipeline.allowedGenerators = next;
+        ConfigManager.sync(ChunkSteward.MODID, Config.Type.INSTANCE);
+        ChunkSteward.LOGGER.info("pipeline listed {}", className);
     }
 }

@@ -34,6 +34,26 @@ final class PipelineGate {
         return false;
     }
 
+    /** The same array when {@code className} is already listed, otherwise a new array with it appended. */
+    static String[] include(String[] names, String className) {
+        if (className == null || className.isEmpty()) {
+            return names;
+        }
+        int length = names == null ? 0 : names.length;
+        for (int i = 0; i < length; i++) {
+            String name = names[i];
+            if (name != null && className.equals(name.trim())) {
+                return names;
+            }
+        }
+        String[] next = new String[length + 1];
+        if (length > 0) {
+            System.arraycopy(names, 0, next, 0, length);
+        }
+        next[length] = className;
+        return next;
+    }
+
     /** Config on, not killed this session, and at least one generator class listed. */
     static boolean engages(boolean enabled, boolean killed, boolean listed) {
         return enabled && !killed && listed;

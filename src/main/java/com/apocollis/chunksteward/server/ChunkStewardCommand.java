@@ -203,7 +203,7 @@ public class ChunkStewardCommand extends CommandBase {
             send(sender, "pipeline verify already running. " + PipelineVerify.status(), TextFormatting.YELLOW);
             return;
         }
-        if (!PipelineVerify.start(world, count)) {
+        if (!PipelineVerify.start(world, count, sender)) {
             send(sender, PipelineVerify.status(), TextFormatting.RED);
             return;
         }

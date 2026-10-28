@@ -12,11 +12,13 @@ import com.apocollis.chunksteward.server.PacingView;
  *
  * <p>The averages cover about the last 20 ticks, so they suit pacing and not exact decisions about the current tick;
  * use {@link #getRemainingTickBudgetMs(double)} for in-tick decisions. This API only grows: existing methods keep their
- * meaning, new ones are added, and {@link #API_VERSION} increases when something is added.
+ * meaning, new ones are added, and {@link #API_VERSION} increases when something is added. Version 3 adds the
+ * pipeline queries below. Call those from a class that is loaded only after {@code API_VERSION >= 3}, so a jar
+ * that is still version 2 does not throw {@code NoSuchMethodError} while this class is linking.
  */
 public final class ChunkStewardAPI {
     /** Incremented when methods are added. Never changes the meaning of an existing method. */
-    public static final int API_VERSION = 2;
+    public static final int API_VERSION = 3;
 
     private ChunkStewardAPI() {
     }
@@ -74,5 +76,60 @@ public final class ChunkStewardAPI {
     /** Chunks whose populate is queued behind the tick budget. */
     public static int getPopulateQueueSize() {
         return PacingView.populateQueueSize();
+    }
+
+    /**
+     * Workers may generate terrain for a listed class and the CPU-guard cap is above 0. This is not
+     * {@link #isGeneratingChunks()}: that one is the player-demand rate preload uses to hold off. (Version 3.)
+     */
+    public static boolean isPipelineActive() {
+        return PacingView.pipelineActive();
+    }
+
+    /**
+     * Terrain jobs that are queued, in flight, or finished and waiting to install. Includes preload and stage 2.
+     * A large value means chunks are held ahead of the server thread, not that players are waiting. (Version 3.)
+     */
+    public static int getPipelineQueueSize() {
+        return PacingView.pipelineQueueSize();
+    }
+
+    /**
+     * Average milliseconds the server thread spent installing a finished worker chunk ({@code recreateStructures}),
+     * smoothed like the tick averages. 0 until the first install. (Version 3.)
+     */
+    public static double getAverageTerrainInstallMs() {
+        return PacingView.averageTerrainInstallMs();
+    }
+
+    /**
+     * A worker has finished this chunk and it is waiting to be installed. The next {@code provideChunk} on the server
+     * thread adopts it instead of generating. False when the world is not loaded, or the chunk was never submitted,
+     * or it is still generating. Call this on the server thread. (Version 3.)
+     */
+    public static boolean isChunkReady(int dimension, int chunkX, int chunkZ) {
+        return PacingView.chunkReady(dimension, chunkX, chunkZ);
+    }
+
+    /**
+     * This thread is a terrain worker, or the server thread while it is copying a worker generator. Mods that stash
+     * the live generator on the server thread should skip that stash when this is true. (Version 3.)
+     */
+    public static boolean isPipelineContext() {
+        return PacingView.pipelineContext();
+    }
+
+    /**
+     * Contexts from each registered {@link JobPreparer#prepare}, in registration order, while a worker is inside
+     * {@code generateChunk}. Null on any other thread, and null when nobody has registered. One preparer is a
+     * one-element array. (Version 3.)
+     */
+    public static Object currentJobContext() {
+        return PacingView.jobContext();
+    }
+
+    /** Registers {@code preparer} once. A second call with the same instance does nothing. (Version 3.) */
+    public static void registerJobPreparer(JobPreparer preparer) {
+        PacingView.registerPreparer(preparer);
     }
 }

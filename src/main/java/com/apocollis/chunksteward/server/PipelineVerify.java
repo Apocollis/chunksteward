@@ -1,9 +1,15 @@
 package com.apocollis.chunksteward.server;
 
 import com.apocollis.chunksteward.ChunkSteward;
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import com.apocollis.chunksteward.mixin.AccessorMapGenStructure;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import net.minecraft.block.Block;
+import net.minecraft.command.ICommandSender;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.util.text.TextComponentString;
+import net.minecraft.util.text.TextFormatting;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.biome.BiomeProvider;
 import net.minecraft.world.chunk.Chunk;
@@ -15,11 +21,14 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Compares a private reference generator with a production-shaped one over the same chunks in two orders. A clean run of
- * at least 10,000 chunks records a pass for that dimension and class.
+ * at least 10,000 chunks records a pass for that dimension and class and adds the class to
+ * {@code pipeline.allowedGenerators}.
  */
 final class PipelineVerify {
     private static final int ORIGIN = 30000;
@@ -27,6 +36,10 @@ final class PipelineVerify {
     private static final int PLATE_MARGIN = 256;
     private static volatile boolean running;
     private static volatile String status = "not run";
+    private static volatile ICommandSender listener;
+    private static final AtomicInteger REFERENCE_DONE = new AtomicInteger();
+    private static final AtomicInteger PRODUCTION_DONE = new AtomicInteger();
+    private static final AtomicBoolean PROGRESS_QUEUED = new AtomicBoolean();
 
     private PipelineVerify() {
     }
@@ -39,7 +52,7 @@ final class PipelineVerify {
         return status;
     }
 
-    static boolean start(WorldServer world, int count) {
+    static boolean start(WorldServer world, int count, ICommandSender sender) {
         if (running) {
             return false;
         }
@@ -67,8 +80,11 @@ final class PipelineVerify {
         }
         int dimension = world.provider.getDimension();
         String className = main.getClass().getName();
+        listener = sender;
+        REFERENCE_DONE.set(0);
+        PRODUCTION_DONE.set(0);
         running = true;
-        status = "running " + count + " in " + dimension;
+        status = "chunk 0 of " + count;
         TerrainPipeline.pause(dimension);
         Thread thread = new Thread(
                 () -> execute(world, count, dimension, className, reference, production, referenceBiome, productionBiome),
@@ -107,22 +123,33 @@ final class PipelineVerify {
             if (mismatch == null && count >= 10000) {
                 PipelinePasses.grant(dimension, className);
                 TerrainPipeline.allow(className);
+                String[] before = ChunkStewardConfig.pipeline.allowedGenerators;
+                String[] listed = PipelineGate.include(before, className);
+                world.addScheduledTask(() -> ChunkStewardConfig.installAllowedGenerators(listed, className));
                 status = "passed " + count + " in dimension " + dimension;
+                String note = listed == before ? "; already listed" : "; listed";
+                tell(world, "pipeline verify passed " + count + " chunks of " + className
+                        + " in dimension " + dimension + note, TextFormatting.GREEN);
                 ChunkSteward.LOGGER.info("pipeline verify passed {} chunks of {} in dimension {}", count, className, dimension);
             } else if (mismatch == null) {
                 status = "clean for " + count + "; a pass needs 10000";
+                tell(world, "pipeline verify clean for " + count + " chunks of " + className
+                        + " in dimension " + dimension + "; a pass needs 10000", TextFormatting.YELLOW);
                 ChunkSteward.LOGGER.info("pipeline verify clean for {} chunks of {} in dimension {}; not recorded",
                         count, className, dimension);
             } else {
                 PipelinePasses.revoke(dimension, className);
                 TerrainPipeline.disallow(className);
                 status = "mismatch at " + mismatch;
+                tell(world, "pipeline verify failed for " + className + " in dimension " + dimension
+                        + ": mismatch at " + mismatch, TextFormatting.RED);
                 ChunkSteward.LOGGER.warn("pipeline verify mismatch for {} in dimension {} at {}", className, dimension, mismatch);
             }
         } catch (Throwable failed) {
             PipelinePasses.revoke(dimension, className);
             TerrainPipeline.disallow(className);
             status = "failed";
+            tell(world, "pipeline verify failed for " + className + " in dimension " + dimension, TextFormatting.RED);
             ChunkSteward.LOGGER.warn("pipeline verify failed for {} in dimension {}", className, dimension, failed);
         } finally {
             PipelineGenerators.restoreVillageStash(stash);
@@ -130,7 +157,56 @@ final class PipelineVerify {
                     (ORIGIN + side) * 16 + PLATE_MARGIN, ORIGIN * 16 - PLATE_MARGIN, (ORIGIN + side) * 16 + PLATE_MARGIN);
             TerrainPipeline.resume(dimension);
             running = false;
+            listener = null;
         }
+    }
+
+    /** The slower leg's finished count. Both legs run at once, so this is how far the compare has actually got. */
+    private static void finishedChunk(WorldServer world, int count, boolean production) {
+        (production ? PRODUCTION_DONE : REFERENCE_DONE).incrementAndGet();
+        int done = Math.min(REFERENCE_DONE.get(), PRODUCTION_DONE.get());
+        status = "chunk " + done + " of " + count;
+        if (done <= 0 || !PROGRESS_QUEUED.compareAndSet(false, true)) {
+            return;
+        }
+        ICommandSender sender = listener;
+        world.addScheduledTask(() -> {
+            PROGRESS_QUEUED.set(false);
+            if (!running || sender == null || !status.startsWith("chunk")) {
+                return;
+            }
+            int shown = Math.min(REFERENCE_DONE.get(), PRODUCTION_DONE.get());
+            status = "chunk " + shown + " of " + count;
+            showProgress(sender, shown, count);
+        });
+    }
+
+    private static void showProgress(ICommandSender sender, int done, int count) {
+        if (done <= 0) {
+            return;
+        }
+        TextComponentString text = new TextComponentString("pipeline verify: chunk " + done + " of " + count);
+        text.getStyle().setColor(TextFormatting.GRAY);
+        Entity entity = sender.getCommandSenderEntity();
+        if (entity instanceof EntityPlayerMP) {
+            ((EntityPlayerMP) entity).sendStatusMessage(text, true);
+            return;
+        }
+        if (done == count || done % 100 == 0) {
+            sender.sendMessage(text);
+        }
+    }
+
+    private static void tell(WorldServer world, String text, TextFormatting color) {
+        ICommandSender sender = listener;
+        world.addScheduledTask(() -> {
+            if (sender == null) {
+                return;
+            }
+            TextComponentString component = new TextComponentString(text);
+            component.getStyle().setColor(color);
+            sender.sendMessage(component);
+        });
     }
 
     private static Thread leg(WorldServer world, IChunkGenerator generator, BiomeProvider biome, boolean production,
@@ -142,6 +218,7 @@ final class PipelineVerify {
                     int z = production ? ORIGIN + (i % side) : ORIGIN + (i / side);
                     Chunk chunk = generate(world, generator, biome, production, x, z);
                     hashes.put(pack(x, z), hashChunk(chunk));
+                    finishedChunk(world, count, production);
                 }
             } catch (Throwable failed) {
                 failure.compareAndSet(null, failed);

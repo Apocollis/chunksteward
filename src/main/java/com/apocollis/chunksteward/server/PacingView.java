@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.server;
 
+import com.apocollis.chunksteward.api.JobPreparer;
 import com.apocollis.chunksteward.config.ChunkStewardConfig;
 
 /**
@@ -46,5 +47,33 @@ public final class PacingView {
 
     public static int populateQueueSize() {
         return PopulateQueue.size();
+    }
+
+    public static boolean pipelineActive() {
+        return TerrainPipeline.isPipelineActive();
+    }
+
+    public static int pipelineQueueSize() {
+        return TerrainPipeline.queueSize();
+    }
+
+    public static double averageTerrainInstallMs() {
+        return TerrainPipeline.averageInstallMs();
+    }
+
+    public static boolean chunkReady(int dimension, int x, int z) {
+        return TerrainPipeline.chunkReady(dimension, x, z);
+    }
+
+    public static boolean pipelineContext() {
+        return PipelineMarker.pipelineContext();
+    }
+
+    public static Object jobContext() {
+        return PipelineMarker.context();
+    }
+
+    public static void registerPreparer(JobPreparer preparer) {
+        PipelinePreparers.register(preparer);
     }
 }

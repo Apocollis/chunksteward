@@ -17,6 +17,10 @@ final class PipelineJob {
     final AtomicInteger state = new AtomicInteger(QUEUED);
     volatile long claimedNanos;
     volatile int workerSlot = -1;
+    /** Preload or stage 2. Player demand clears this. Evicted first when the ready map is full. */
+    volatile boolean speculative;
+    /** {@link com.apocollis.chunksteward.api.JobPreparer} contexts, or null. */
+    volatile Object context;
 
     PipelineJob(int dimension, int x, int z, int epoch) {
         this.dimension = dimension;

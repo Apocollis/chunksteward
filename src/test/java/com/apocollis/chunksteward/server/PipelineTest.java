@@ -25,6 +25,19 @@ class PipelineTest {
     }
 
     @Test
+    void includeAppendsANewClassOnce() {
+        assertArrayEquals(new String[] {"a.B"}, PipelineGate.include(null, "a.B"));
+        assertArrayEquals(new String[] {"a.B"}, PipelineGate.include(new String[0], "a.B"));
+        String[] listed = new String[] {"a.B"};
+        assertSame(listed, PipelineGate.include(listed, "a.B"));
+        String[] padded = new String[] {" a.B "};
+        assertSame(padded, PipelineGate.include(padded, "a.B"));
+        assertArrayEquals(new String[] {"a.B", "c.D"}, PipelineGate.include(listed, "c.D"));
+        assertSame(listed, PipelineGate.include(listed, ""));
+        assertSame(listed, PipelineGate.include(listed, null));
+    }
+
+    @Test
     void emptyWhitelistDoesNotEngage() {
         assertFalse(PipelineGate.hasGenerator(null));
         assertFalse(PipelineGate.hasGenerator(new String[0]));
@@ -34,6 +47,26 @@ class PipelineTest {
         assertFalse(PipelineGate.engages(false, false, true));
         assertFalse(PipelineGate.engages(true, true, true));
         assertTrue(PipelineGate.engages(true, false, true));
+    }
+
+    @Test
+    void speculativeFillsOnlyLeftoverSlots() {
+        assertEquals(0, PipelineRank.speculativeKept(16, 4, 16));
+        assertEquals(2, PipelineRank.speculativeKept(14, 4, 16));
+        assertEquals(4, PipelineRank.speculativeKept(0, 4, 16));
+        assertEquals(0, PipelineRank.speculativeKept(3, 4, 0));
+    }
+
+    @Test
+    void discardReadyDoesNotCountAsInstalled() {
+        PipelineTable table = new PipelineTable();
+        PipelineJob job = table.submit(0, 9, 9);
+        assertTrue(table.claimWorker(job));
+        assertTrue(table.publish(job));
+        assertSame(job, table.discardReady(0, 9, 9));
+        assertEquals(1L, table.discarded.get());
+        assertEquals(0L, table.installed.get());
+        assertEquals(null, table.readyAt(0, 9, 9));
     }
 
     @Test

@@ -140,6 +140,18 @@ final class PipelineTable {
         return claimed;
     }
 
+    /** Drops a ready result without counting it as installed. */
+    PipelineJob discardReady(int dimension, int x, int z) {
+        PipelineKey key = new PipelineKey(dimension, x, z);
+        PipelineJob job = ready.remove(key);
+        if (job == null) {
+            return null;
+        }
+        jobs.remove(key, job);
+        discarded.incrementAndGet();
+        return job;
+    }
+
     /** Removes a ready result. Counts as installed when the caller kept it. */
     PipelineJob takeReady(int dimension, int x, int z) {
         PipelineJob job = ready.remove(new PipelineKey(dimension, x, z));

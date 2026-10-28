@@ -25,12 +25,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * Terrain pipeline. Workers generate a listed generator after that class has passed verify in the dimension.
- * An empty {@code allowedGenerators} list starts nothing. RTG is copied, and it still shares {@code RTGWorld}.
+ * Terrain pipeline. A listed generator runs off the server thread in every dimension that uses that class.
+ * An empty {@code allowedGenerators} list starts nothing.
  */
 public final class TerrainPipeline {
     private static final Object LOCK = new Object();
@@ -50,6 +51,9 @@ public final class TerrainPipeline {
     private static volatile boolean loliBlocked;
     private static volatile int pausedDimension = Integer.MIN_VALUE;
     private static volatile PipelineJob[] snapshot = NO_JOBS;
+    private static final ConcurrentLinkedDeque<PipelineKey> SPECULATIVE_READY = new ConcurrentLinkedDeque<PipelineKey>();
+    private static double installEma;
+    private static boolean installPrimed;
     private static final AtomicInteger CURSOR = new AtomicInteger();
     private static Thread[] threads = NO_THREADS;
     private static boolean[] retire = new boolean[0];
@@ -72,9 +76,36 @@ public final class TerrainPipeline {
     private TerrainPipeline() {
     }
 
-    /** True while a passed dimension is allowed to take worker terrain and the cap is above 0. */
+    /** True while workers may take terrain for a listed generator and the cap is above 0. */
     static boolean isPipelineActive() {
-        return run && !killed && !loliBlocked && GUARD.cap() > 0 && PipelinePasses.any();
+        return run && !killed && !loliBlocked && GUARD.cap() > 0;
+    }
+
+    static int queueSize() {
+        return TABLE.count(PipelineJob.QUEUED)
+                + TABLE.count(PipelineJob.CLAIMED_WORKER)
+                + TABLE.count(PipelineJob.CLAIMED_MAIN)
+                + TABLE.readyCount();
+    }
+
+    static double averageInstallMs() {
+        return installPrimed ? installEma : 0.0;
+    }
+
+    static boolean chunkReady(int dimension, int x, int z) {
+        WorldServer world = DimensionManager.getWorld(dimension);
+        return world != null && ready(world, x, z);
+    }
+
+    /**
+     * Preload and stage 2 should not generate this chunk on the server thread. A finished result still installs
+     * through {@code provideChunk}. False when speculative production is off or this world is not being served.
+     */
+    static boolean deferSpeculative(World world, int x, int z) {
+        if (!ChunkStewardConfig.pipeline.speculative || !serving(world)) {
+            return false;
+        }
+        return !ready(world, x, z);
     }
 
     static PipelineTable table() {
@@ -87,6 +118,9 @@ public final class TerrainPipeline {
             stopWorkers();
             TABLE.clear();
             CHUNKS.clear();
+            SPECULATIVE_READY.clear();
+            installEma = 0.0;
+            installPrimed = false;
             GENERATORS.clear();
             BIOMES.clear();
             DISALLOWED.clear();
@@ -172,7 +206,7 @@ public final class TerrainPipeline {
                 watchdog();
                 replaceRetired();
             }
-            if (!run || loliBlocked || !PipelinePasses.any() || TickMonitor.savePaused()) {
+            if (!run || loliBlocked || TickMonitor.savePaused()) {
                 sampling = false;
                 return;
             }
@@ -275,7 +309,7 @@ public final class TerrainPipeline {
         for (int slot = 0; slot < count; slot++) {
             threads[slot] = startWorker(slot);
         }
-        ChunkSteward.LOGGER.info("pipeline workers started ({}); a listed generator runs after a verify pass", count);
+        ChunkSteward.LOGGER.info("pipeline workers started ({}); a listed generator runs off the server thread", count);
     }
 
     private static void stopWorkers() {
@@ -368,7 +402,7 @@ public final class TerrainPipeline {
         }
         int dimension = world.provider.getDimension();
         PipelineKey key = new PipelineKey(dimension, x, z);
-        Chunk installed = install(generator, dimension, x, z, key);
+        Chunk installed = install(world, generator, dimension, x, z, key);
         if (installed != null) {
             return installed;
         }
@@ -378,7 +412,7 @@ public final class TerrainPipeline {
             while (job.state.get() == PipelineJob.CLAIMED_WORKER && System.nanoTime() < deadline) {
                 LockSupport.parkNanos(1_000_000L);
             }
-            installed = install(generator, dimension, x, z, key);
+            installed = install(world, generator, dimension, x, z, key);
             if (installed != null) {
                 return installed;
             }
@@ -405,8 +439,7 @@ public final class TerrainPipeline {
             noteUnsupported(generator);
             return false;
         }
-        String className = generator.getClass().getName();
-        return !DISALLOWED.contains(className) && PipelinePasses.passed(dimension, className);
+        return !DISALLOWED.contains(generator.getClass().getName());
     }
 
     static boolean ready(World world, int x, int z) {
@@ -419,7 +452,7 @@ public final class TerrainPipeline {
                 && CHUNKS.containsKey(new PipelineKey(dimension, x, z));
     }
 
-    private static Chunk install(IChunkGenerator generator, int dimension, int x, int z, PipelineKey key) {
+    private static Chunk install(World world, IChunkGenerator generator, int dimension, int x, int z, PipelineKey key) {
         PipelineJob job = TABLE.readyAt(dimension, x, z);
         if (job == null || job.epoch != TABLE.epoch(dimension) || job.state.get() != PipelineJob.DONE) {
             return null;
@@ -428,6 +461,13 @@ public final class TerrainPipeline {
         if (chunk == null) {
             return null;
         }
+        if (job.context != null && !PipelinePreparers.valid(job.context, world, x, z)) {
+            CHUNKS.remove(key, chunk);
+            TABLE.discardReady(dimension, x, z);
+            SPECULATIVE_READY.remove(key);
+            return null;
+        }
+        long started = System.nanoTime();
         try {
             generator.recreateStructures(chunk, x, z);
         } catch (RuntimeException failed) {
@@ -439,7 +479,19 @@ public final class TerrainPipeline {
             return null;
         }
         TABLE.takeReady(dimension, x, z);
+        SPECULATIVE_READY.remove(key);
+        noteInstall(System.nanoTime() - started);
         return chunk;
+    }
+
+    private static void noteInstall(long nanos) {
+        double ms = nanos / 1.0e6;
+        if (!installPrimed) {
+            installEma = ms;
+            installPrimed = true;
+        } else {
+            installEma += 0.2 * (ms - installEma);
+        }
     }
 
     private static void ensureGenerators() {
@@ -461,8 +513,15 @@ public final class TerrainPipeline {
                 if (GENERATORS.get(slot).containsKey(dimension)) {
                     continue;
                 }
-                BiomeProvider biome = PipelineGenerators.copyBiome(world);
-                IChunkGenerator copy = PipelineGenerators.copy(world, main, biome);
+                PipelineMarker.constructing(true);
+                BiomeProvider biome;
+                IChunkGenerator copy;
+                try {
+                    biome = PipelineGenerators.copyBiome(world);
+                    copy = PipelineGenerators.copy(world, main, biome);
+                } finally {
+                    PipelineMarker.constructing(false);
+                }
                 if (biome == null || copy == null) {
                     noteUnsupported(main);
                     break;
@@ -473,13 +532,10 @@ public final class TerrainPipeline {
         }
     }
 
-    /** Passed and listed, including while the cap is 0 or verify has this dimension paused. */
+    /** Listed and supported, including while the cap is 0 or verify has this dimension paused. */
     private static boolean listedPassed(World world) {
         IChunkGenerator generator = PipelineGenerators.of(world);
-        if (!PipelineGenerators.supported(generator) || !PipelineGenerators.listed(generator)) {
-            return false;
-        }
-        return PipelinePasses.passed(world.provider.getDimension(), generator.getClass().getName());
+        return PipelineGenerators.supported(generator) && PipelineGenerators.listed(generator);
     }
 
     private static void noteUnsupported(IChunkGenerator generator) {
@@ -521,19 +577,67 @@ public final class TerrainPipeline {
         }
         found.sort(Comparator.comparingDouble(scored -> scored.score));
         int limit = Math.max(1, ChunkStewardConfig.pipeline.maxInFlight);
-        if (found.size() > limit) {
-            found = found.subList(0, limit);
-        }
+        int players = Math.min(found.size(), limit);
         Set<PipelineKey> keep = new HashSet<PipelineKey>();
-        PipelineJob[] ranked = new PipelineJob[found.size()];
-        for (int i = 0; i < found.size(); i++) {
+        List<PipelineJob> ranked = new ArrayList<PipelineJob>(limit);
+        for (int i = 0; i < players; i++) {
             Scored scored = found.get(i);
-            ranked[i] = TABLE.submit(scored.dimension, scored.x, scored.z);
+            ranked.add(enqueue(scored.dimension, scored.x, scored.z, false));
             keep.add(new PipelineKey(scored.dimension, scored.x, scored.z));
         }
+        if (ChunkStewardConfig.pipeline.speculative && players < limit) {
+            List<int[]> extra = new ArrayList<int[]>();
+            int room = limit - players;
+            IdlePreload.collectSpeculative(extra, room);
+            if (extra.size() < room) {
+                Stage2Pregen.collectSpeculative(extra, room - extra.size());
+            }
+            int kept = PipelineRank.speculativeKept(players, extra.size(), limit);
+            for (int i = 0; i < extra.size() && ranked.size() < players + kept; i++) {
+                int[] target = extra.get(i);
+                PipelineKey key = new PipelineKey(target[0], target[1], target[2]);
+                if (!keep.add(key)) {
+                    continue;
+                }
+                ranked.add(enqueue(target[0], target[1], target[2], true));
+            }
+        }
         TABLE.dropQueuedExcept(keep);
-        snapshot = ranked;
+        snapshot = ranked.toArray(NO_JOBS);
         CURSOR.set(0);
+    }
+
+    private static PipelineJob enqueue(int dimension, int x, int z, boolean speculative) {
+        PipelineJob job = TABLE.submit(dimension, x, z);
+        job.speculative = speculative;
+        if (!speculative) {
+            SPECULATIVE_READY.remove(new PipelineKey(dimension, x, z));
+        }
+        if (job.context == null) {
+            WorldServer world = DimensionManager.getWorld(dimension);
+            if (world != null) {
+                job.context = PipelinePreparers.prepare(world, x, z);
+            }
+        }
+        return job;
+    }
+
+    /** Drops the oldest speculative ready chunk so a player job can take its place. */
+    private static boolean evictOldestSpeculative() {
+        for (int i = 0; i < SPECULATIVE_READY.size(); i++) {
+            PipelineKey key = SPECULATIVE_READY.pollFirst();
+            if (key == null) {
+                return false;
+            }
+            PipelineJob job = TABLE.readyAt(key.dimension, key.x, key.z);
+            if (job == null || !job.speculative) {
+                continue;
+            }
+            CHUNKS.remove(key);
+            TABLE.discardReady(key.dimension, key.x, key.z);
+            return true;
+        }
+        return false;
     }
 
     private static void watchdog() {
@@ -641,7 +745,7 @@ public final class TerrainPipeline {
             while (run && (slot >= retire.length || !retire[slot])) {
                 PipelineJob[] jobs = snapshot;
                 int cap = GUARD.cap();
-                if (slot >= cap || jobs.length == 0 || TABLE.readyCount() >= ChunkStewardConfig.pipeline.maxReady) {
+                if (slot >= cap || jobs.length == 0) {
                     LockSupport.parkNanos(50_000_000L);
                     continue;
                 }
@@ -651,6 +755,11 @@ public final class TerrainPipeline {
                     continue;
                 }
                 PipelineJob job = jobs[index];
+                if (TABLE.readyCount() >= ChunkStewardConfig.pipeline.maxReady
+                        && (job.speculative || !evictOldestSpeculative())) {
+                    LockSupport.parkNanos(50_000_000L);
+                    continue;
+                }
                 if (!TABLE.claimWorker(job)) {
                     continue;
                 }
@@ -672,6 +781,7 @@ public final class TerrainPipeline {
             Chunk[] held = new Chunk[1];
             PipelineMarker.set(true, false);
             PipelineMarker.biome(biome, job.dimension);
+            PipelineMarker.context(job.context);
             try {
                 BedrockShim.run(world, () -> held[0] = generator.generateChunk(job.x, job.z));
                 if (held[0] == null) {
@@ -681,6 +791,8 @@ public final class TerrainPipeline {
                 CHUNKS.put(key, held[0]);
                 if (!TABLE.publish(job)) {
                     CHUNKS.remove(key, held[0]);
+                } else if (job.speculative) {
+                    SPECULATIVE_READY.add(key);
                 }
             } catch (Throwable failed) {
                 TABLE.fail(job);

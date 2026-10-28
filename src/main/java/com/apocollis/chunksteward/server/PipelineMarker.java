@@ -17,6 +17,8 @@ public final class PipelineMarker {
     private static final ThreadLocal<Integer> DIMENSION = new ThreadLocal<Integer>();
     private static final ThreadLocal<MapStorage> SCRATCH = new ThreadLocal<MapStorage>();
     private static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>();
+    private static final ThreadLocal<Object> CONTEXT = new ThreadLocal<Object>();
+    private static final ThreadLocal<Boolean> CONSTRUCTING = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     private PipelineMarker() {
     }
@@ -39,6 +41,7 @@ public final class PipelineMarker {
         BIOME.remove();
         DIMENSION.remove();
         RANDOM.remove();
+        CONTEXT.remove();
         ThreadSeaLevel.clear();
         ThreadSurfaceBlocks.exit();
         ThreadRtg.clearGenerator();
@@ -50,6 +53,31 @@ public final class PipelineMarker {
 
     public static boolean verify() {
         return (FLAGS.get() & VERIFY) != 0;
+    }
+
+    /** True on a terrain worker, or on the server thread while it is copying a worker generator. */
+    public static boolean pipelineContext() {
+        return worker() || Boolean.TRUE.equals(CONSTRUCTING.get());
+    }
+
+    public static void constructing(boolean active) {
+        if (active) {
+            CONSTRUCTING.set(Boolean.TRUE);
+        } else {
+            CONSTRUCTING.remove();
+        }
+    }
+
+    public static void context(Object value) {
+        if (value == null) {
+            CONTEXT.remove();
+        } else {
+            CONTEXT.set(value);
+        }
+    }
+
+    public static Object context() {
+        return CONTEXT.get();
     }
 
     /** The job's private provider and the dimension it belongs to. */

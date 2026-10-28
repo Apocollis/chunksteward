@@ -26,4 +26,13 @@ final class PipelineRank {
         }
         return out;
     }
+
+    /** Speculative jobs fill only the window left after player jobs. */
+    static int speculativeKept(int players, int speculative, int limit) {
+        if (limit <= 0 || speculative <= 0) {
+            return 0;
+        }
+        int room = limit - Math.min(Math.max(players, 0), limit);
+        return Math.min(speculative, room);
+    }
 }

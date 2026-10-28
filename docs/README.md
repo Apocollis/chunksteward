@@ -1,6 +1,6 @@
 # Chunk Steward — Architecture
 
-Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk. A dimension's own chunk generator can move off the server thread after a verify pass for that class ([pipeline.md](pipeline.md)). RTG is included. A worker or verify thread uses that generator's random, locks each shared terrain and surface call, and keeps a private cellular cache. The server thread still uses the shared `RTGWorld`. Populate and every `IWorldGenerator` stay on the server thread.
+Server-side performance mod (`chunksteward`) for 1.12.2 / CleanroomMC. Smooths chunk loading and generation so bursts do not cause tick lag. It spreads work across ticks; it cannot split the cost of one heavy chunk. A dimension's own chunk generator can move off the server thread when its exact class is listed in `pipeline.allowedGenerators` ([pipeline.md](pipeline.md)). A clean verify of 10000 chunks adds the class. RTG is included. A worker or verify thread uses that generator's random, locks each shared terrain and surface call, and keeps a private cellular cache. The server thread still uses the shared `RTGWorld`. Populate and every `IWorldGenerator` stay on the server thread.
 
 Formerly Lazy Chunks 1.12 (modid `lazychunks`); renamed to Chunk Steward (modid `chunksteward`) when the scope grew past chunk loading. Credits and licence notes: [../NOTICE.md](../NOTICE.md).
 
@@ -22,7 +22,7 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 | Random-tick guard | [random-ticks.md](random-ticks.md) |
 | Stage gate: populate suppression, light deferral | [stage-gate.md](stage-gate.md) |
 | Status log metrics | [metrics.md](metrics.md) |
-| Terrain pipeline (no generation in this build) | [pipeline.md](pipeline.md) |
+| Terrain pipeline | [pipeline.md](pipeline.md) |
 | Temporary diagnostics (`dbg` lines) | [diagnostics.md](diagnostics.md) |
 | Build / deploy | [build-and-release.md](build-and-release.md) |
 | Smoke tests | [verification.md](verification.md) |

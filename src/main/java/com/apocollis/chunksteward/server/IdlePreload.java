@@ -241,6 +241,10 @@ public final class IdlePreload {
                 GeneratedCache.add(dim, target.x, target.z);
                 continue;
             }
+            if (TerrainPipeline.deferSpeculative(world, target.x, target.z)) {
+                state.queue.addFirst(target);
+                return false;
+            }
             Chunk chunk;
             if (target.terrainOnly) {
                 StageGate.beginTerrainOnly(dim, target.x, target.z);
@@ -347,6 +351,32 @@ public final class IdlePreload {
             queue.add(new Target((int) k[1], (int) k[2], k[3] != 0));
         }
         return queue;
+    }
+
+    /** Heads of player preload queues, skipping chunks already known to exist. At most {@code limit}. */
+    static void collectSpeculative(List<int[]> out, int limit) {
+        if (limit <= 0 || out == null) {
+            return;
+        }
+        for (PlayerState state : STATES.values()) {
+            if (out.size() >= limit || state.queue == null || state.lastDim == Integer.MIN_VALUE) {
+                continue;
+            }
+            int seen = 0;
+            for (Target target : state.queue) {
+                if (seen++ >= MAX_GENERATED_CHECKS_PER_TICK) {
+                    break;
+                }
+                if (GeneratedCache.known(state.lastDim, target.x, target.z)) {
+                    continue;
+                }
+                out.add(new int[] {state.lastDim, target.x, target.z});
+                break;
+            }
+            if (out.size() >= limit) {
+                return;
+            }
+        }
     }
 
     static String reportAndReset() {

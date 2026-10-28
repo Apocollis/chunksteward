@@ -150,6 +150,30 @@ public final class Stage2Pregen {
         return best;
     }
 
+    /** The chunk at the head of each open terrain ring, skipping ones already known to exist. */
+    static void collectSpeculative(List<int[]> out, int limit) {
+        if (limit <= 0 || out == null) {
+            return;
+        }
+        for (Map.Entry<Long, Work> entry : WORK.entrySet()) {
+            if (out.size() >= limit) {
+                return;
+            }
+            Work work = entry.getValue();
+            if (work.phase != PHASE_TERRAIN || work.queue == null || work.queue.isEmpty()) {
+                continue;
+            }
+            long packed = work.queue.firstLong();
+            int x = (int) packed;
+            int z = (int) (packed >> 32);
+            int dim = (int) (entry.getKey() >> 32);
+            if (GeneratedCache.known(dim, x, z)) {
+                continue;
+            }
+            out.add(new int[] {dim, x, z});
+        }
+    }
+
     static int terrainRadius() {
         ChunkStewardConfig.Stage2 cfg = ChunkStewardConfig.stage2;
         return Math.max(cfg.radiusTerrain, cfg.radiusFull + 1);
@@ -194,6 +218,14 @@ public final class Stage2Pregen {
             checks++;
             if (!world.getWorldBorder().contains(new ChunkPos(x, z))) {
                 continue;
+            }
+            if (w.phase == PHASE_TERRAIN
+                    && !GeneratedCache.known(dim, x, z)
+                    && StageGate.peek(provider, x, z) == null
+                    && !provider.isChunkGeneratedAt(x, z)
+                    && TerrainPipeline.deferSpeculative(world, x, z)) {
+                w.queue.enqueueFirst(key);
+                return false;
             }
             activeWhat = (w.phase == PHASE_TERRAIN ? "terrain ring " : "populate ring ") + w.ring;
             boolean did = w.phase == PHASE_TERRAIN

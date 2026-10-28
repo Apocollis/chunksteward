@@ -34,7 +34,7 @@ Chunks already loaded or known to exist are skipped (at most 16 checks per tick)
 
 ## Full chunks
 
-Generated with `ChunkProviderServer.provideChunk` on the server thread. A chunk is populated only once its neighbours exist, so each is held loaded for `holdTicks` (200) through `ChunkHolds` and then released with `queueUnload` (which saves it). `maxHeldChunks` caps the hold list, shared with cascade chunks. Chunks a player watches or a Forge ticket owns are never released.
+Generated with `ChunkProviderServer.provideChunk` on the server thread. When `pipeline.speculative` is on and that dimension's generator is being served, a chunk that is not already finished is put back at the head of the player's queue and this interval does not count. The next `provideChunk` runs only to install the worker result, still inside the terrain-only or full-preload scope. A chunk is populated only once its neighbours exist, so each full chunk is held loaded for `holdTicks` (200) through `ChunkHolds` and then released with `queueUnload` (which saves it). `maxHeldChunks` caps the hold list, shared with cascade chunks. Chunks a player watches or a Forge ticket owns are never released.
 
 ## Terrain-only chunks
 
