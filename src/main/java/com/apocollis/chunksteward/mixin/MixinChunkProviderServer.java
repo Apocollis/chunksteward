@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.mixin;
 
+import com.apocollis.chunksteward.server.FeatureHooks;
 import com.apocollis.chunksteward.server.FeatureLane;
 import com.apocollis.chunksteward.server.GenMetrics;
 import com.apocollis.chunksteward.server.RandomTickGuard;
@@ -51,6 +52,34 @@ public abstract class MixinChunkProviderServer {
             shift = At.Shift.AFTER))
     private void chunksteward$terrainEnd(int x, int z, CallbackInfoReturnable<Chunk> cir) {
         GenMetrics.exit(GenMetrics.TERRAIN);
+    }
+
+    /**
+     * A feature job on a worker reads chunks from its own window, never from the shared chunk map, and never loads or
+     * generates one. A mod generator that asks the chunk provider is answered the same way (or aborts the job).
+     */
+    @Inject(method = "getLoadedChunk(II)Lnet/minecraft/world/chunk/Chunk;", at = @At("HEAD"), cancellable = true)
+    private void chunksteward$featureLoaded(int x, int z, CallbackInfoReturnable<Chunk> cir) {
+        Chunk chunk = FeatureHooks.providerChunk(x, z);
+        if (chunk != null) {
+            cir.setReturnValue(chunk);
+        }
+    }
+
+    @Inject(method = "loadChunk(II)Lnet/minecraft/world/chunk/Chunk;", at = @At("HEAD"), cancellable = true)
+    private void chunksteward$featureLoad(int x, int z, CallbackInfoReturnable<Chunk> cir) {
+        Chunk chunk = FeatureHooks.providerChunk(x, z);
+        if (chunk != null) {
+            cir.setReturnValue(chunk);
+        }
+    }
+
+    @Inject(method = "provideChunk(II)Lnet/minecraft/world/chunk/Chunk;", at = @At("HEAD"), cancellable = true)
+    private void chunksteward$featureProvide(int x, int z, CallbackInfoReturnable<Chunk> cir) {
+        Chunk chunk = FeatureHooks.providerChunk(x, z);
+        if (chunk != null) {
+            cir.setReturnValue(chunk);
+        }
     }
 
     /** A chunk with staged populate work that is not applied yet stays loaded. */

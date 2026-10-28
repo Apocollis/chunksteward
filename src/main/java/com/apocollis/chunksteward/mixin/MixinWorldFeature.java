@@ -7,7 +7,12 @@ import net.minecraft.entity.Entity;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.util.math.AxisAlignedBB;
+import net.minecraft.village.VillageCollection;
 import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.storage.MapStorage;
+import com.google.common.base.Predicate;
+import java.util.List;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -147,5 +152,49 @@ public abstract class MixinWorldFeature {
             at = @At("HEAD"))
     private void chunksteward$featureNotify(BlockPos pos, Block block, boolean updateObservers, CallbackInfo ci) {
         FeatureHooks.unsupported("notifyNeighborsOfStateChange");
+    }
+
+    // Reads of shared state a worker cannot take a consistent copy of: the job aborts and runs inline.
+
+    @Inject(method = "getEntitiesWithinAABB(Ljava/lang/Class;Lnet/minecraft/util/math/AxisAlignedBB;)Ljava/util/List;",
+            at = @At("HEAD"))
+    private void chunksteward$featureEntities(Class<?> type, AxisAlignedBB box, CallbackInfoReturnable<List<?>> cir) {
+        FeatureHooks.unsupported("getEntitiesWithinAABB");
+    }
+
+    @Inject(method = "getEntitiesWithinAABB(Ljava/lang/Class;Lnet/minecraft/util/math/AxisAlignedBB;"
+            + "Lcom/google/common/base/Predicate;)Ljava/util/List;", at = @At("HEAD"))
+    private void chunksteward$featureEntitiesFiltered(Class<?> type, AxisAlignedBB box, Predicate<?> filter,
+                                                      CallbackInfoReturnable<List<?>> cir) {
+        FeatureHooks.unsupported("getEntitiesWithinAABB");
+    }
+
+    @Inject(method = "getEntitiesWithinAABBExcludingEntity(Lnet/minecraft/entity/Entity;"
+            + "Lnet/minecraft/util/math/AxisAlignedBB;)Ljava/util/List;", at = @At("HEAD"))
+    private void chunksteward$featureEntitiesExcluding(Entity entity, AxisAlignedBB box,
+                                                       CallbackInfoReturnable<List<Entity>> cir) {
+        FeatureHooks.unsupported("getEntitiesWithinAABBExcludingEntity");
+    }
+
+    @Inject(method = "getEntitiesInAABBexcluding(Lnet/minecraft/entity/Entity;Lnet/minecraft/util/math/AxisAlignedBB;"
+            + "Lcom/google/common/base/Predicate;)Ljava/util/List;", at = @At("HEAD"))
+    private void chunksteward$featureEntitiesInAabb(Entity entity, AxisAlignedBB box, Predicate<?> filter,
+                                                    CallbackInfoReturnable<List<Entity>> cir) {
+        FeatureHooks.unsupported("getEntitiesInAABBexcluding");
+    }
+
+    @Inject(method = "getVillageCollection()Lnet/minecraft/village/VillageCollection;", at = @At("HEAD"))
+    private void chunksteward$featureVillages(CallbackInfoReturnable<VillageCollection> cir) {
+        FeatureHooks.unsupported("getVillageCollection");
+    }
+
+    @Inject(method = "getMapStorage()Lnet/minecraft/world/storage/MapStorage;", at = @At("HEAD"))
+    private void chunksteward$featureMapStorage(CallbackInfoReturnable<MapStorage> cir) {
+        FeatureHooks.unsupported("getMapStorage");
+    }
+
+    @Inject(method = "getPerWorldStorage()Lnet/minecraft/world/storage/MapStorage;", at = @At("HEAD"))
+    private void chunksteward$featurePerWorldStorage(CallbackInfoReturnable<MapStorage> cir) {
+        FeatureHooks.unsupported("getPerWorldStorage");
     }
 }

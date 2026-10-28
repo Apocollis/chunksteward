@@ -14,7 +14,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -40,12 +39,6 @@ public final class FeatureLane {
     private static FeatureJob running;
     private static long nextSeq;
     private static volatile int held;
-    private static int abortsLogged;
-
-    static final AtomicInteger SUBMITTED = new AtomicInteger();
-    static final AtomicInteger APPLIED = new AtomicInteger();
-    static final AtomicInteger ABORTED = new AtomicInteger();
-    static final AtomicInteger FELL_BACK = new AtomicInteger();
 
     private FeatureLane() {
     }
@@ -75,6 +68,7 @@ public final class FeatureLane {
             for (int dz = FeatureWindow.READ_LOW; dz <= FeatureWindow.READ_HIGH; dz++) {
                 Chunk chunk = provider.getLoadedChunk(x + dx, z + dz);
                 if (chunk == null) {
+                    FeatureStats.count(FeatureStats.DECLINED_UNLOADED);
                     return null;
                 }
                 window[FeatureWindow.index(x, z, x + dx, z + dz)] = chunk;
@@ -84,11 +78,13 @@ public final class FeatureLane {
         FeatureJob job;
         synchronized (LOCK) {
             if (QUEUE.size() >= ChunkStewardConfig.features.maxQueued) {
+                FeatureStats.count(FeatureStats.DECLINED_QUEUE);
                 return null;
             }
             int dimension = world.provider.getDimension();
             for (FeatureJob other : QUEUE) {
                 if (other.holds(dimension, x, z)) {
+                    FeatureStats.count(FeatureStats.DECLINED_BUSY);
                     return null;
                 }
             }
@@ -96,7 +92,7 @@ public final class FeatureLane {
             QUEUE.addLast(job);
             held = QUEUE.size();
         }
-        SUBMITTED.incrementAndGet();
+        FeatureStats.count(FeatureStats.SUBMITTED);
         TerrainPipeline.wakeWorkers();
         return job;
     }
@@ -207,7 +203,11 @@ public final class FeatureLane {
             job.scope = scope;
             PipelineMarker.set(true, false);
             PipelineMarker.biome(biome, job.dimension);
-            DECO.lock();
+            boolean decoLock = needsDecorationLock(job);
+            if (decoLock) {
+                DECO.lock();
+            }
+            long started = System.nanoTime();
             try {
                 scope.begin();
                 for (FeatureStage stage : job.stages) {
@@ -221,19 +221,40 @@ public final class FeatureLane {
                 failure = abort.getMessage();
             } catch (Throwable error) {
                 failure = scope.abortReason() != null ? scope.abortReason() : "error: " + error;
+                if (scope.abortReason() == null) {
+                    job.culprit = FeatureStats.culpritOf(error.getStackTrace());
+                }
             } finally {
+                job.workNanos = System.nanoTime() - started;
                 scope.end();
-                DECO.unlock();
+                if (decoLock) {
+                    DECO.unlock();
+                }
                 PipelineMarker.clear();
+            }
+            if (failure != null && scope.culprit() != null) {
+                job.culprit = scope.culprit();
             }
         }
         job.failure = failure;
+        if (failure == null) {
+            FeatureStats.count(FeatureStats.WORKER_OK);
+        }
         job.state.compareAndSet(FeatureJob.RUNNING, failure == null ? FeatureJob.DONE : FeatureJob.FAILED);
         synchronized (LOCK) {
             if (running == job) {
                 running = null;
             }
         }
+    }
+
+    private static boolean needsDecorationLock(FeatureJob job) {
+        for (FeatureStage stage : job.stages) {
+            if (stage.needsDecorationLock()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---- server thread: apply ----------------------------------------------------------------------------------
@@ -339,28 +360,42 @@ public final class FeatureLane {
     private static void apply(FeatureJob job) {
         Chunk center = job.center();
         boolean fallBack = job.state.get() != FeatureJob.DONE;
+        FeatureStats.waited(System.nanoTime() - job.createdNanos);
+        if (job.workNanos > 0L) {
+            FeatureStats.work(job.workNanos);
+        }
         if (fallBack) {
-            FELL_BACK.incrementAndGet();
             noteAbort(job);
+        } else {
+            for (FeatureStage stage : job.stages) {
+                if (stage instanceof GeneratorStage) {
+                    FeatureStats.count(FeatureStats.GEN_STAGED);
+                }
+            }
         }
         boolean previousFalling = BlockFalling.fallInstantly;
         BlockFalling.fallInstantly = true;
         PopulateScopes.begin(job.world, center);
         try {
             if (fallBack) {
-                DECO.lock();
+                boolean decoLock = needsDecorationLock(job);
+                if (decoLock) {
+                    DECO.lock();
+                }
                 try {
                     for (FeatureStage stage : job.stages) {
                         stage.runInline();
                     }
                 } finally {
-                    DECO.unlock();
+                    if (decoLock) {
+                        DECO.unlock();
+                    }
                 }
             } else {
                 replay(job);
             }
             job.finish.run();
-            APPLIED.incrementAndGet();
+            FeatureStats.count(FeatureStats.APPLIED);
         } catch (Throwable error) {
             ChunkSteward.LOGGER.error("staged populate failed at chunk {},{} in dimension {}",
                     job.x, job.z, job.dimension, error);
@@ -381,12 +416,20 @@ public final class FeatureLane {
         }
     }
 
+    /** Counts why the job fell back, strikes the generator behind it, and logs each distinct reason once. */
     private static void noteAbort(FeatureJob job) {
-        ABORTED.incrementAndGet();
-        if (ChunkStewardConfig.features.logAborts && abortsLogged < 20) {
-            abortsLogged++;
-            ChunkSteward.LOGGER.info("staged populate at chunk {},{} ran inline: {}", job.x, job.z,
-                    job.failure != null ? job.failure : (job.state.get() == FeatureJob.ABANDONED ? "gave up waiting" : "no result"));
+        String reason = job.failure != null ? job.failure
+                : (job.state.get() == FeatureJob.ABANDONED ? "gave up waiting" : "no result");
+        int category = job.failure == null ? FeatureStats.INLINE_TIMEOUT : FeatureStats.categoryOf(job.failure);
+        FeatureStats.count(category);
+        FeatureStats.culprit(job.culprit);
+        FeatureScope scope = job.scope;
+        if (scope != null && category != FeatureStats.INLINE_ERROR && scope.culpritGenerator() != null) {
+            GeneratorPolicy.strike(scope.culpritGenerator(), reason);
+        }
+        if (ChunkStewardConfig.features.logAborts && FeatureStats.firstSeen(category + "/" + job.culprit)) {
+            ChunkSteward.LOGGER.info("staged populate at chunk {},{} ran inline: {}{}", job.x, job.z, reason,
+                    job.culprit != null ? " (caused by " + job.culprit + ")" : "");
         }
     }
 
@@ -394,8 +437,8 @@ public final class FeatureLane {
         if (!ChunkStewardConfig.features.enabled) {
             return "staged populate off";
         }
-        return "staged populate queued " + held + ", submitted " + SUBMITTED.get() + ", applied " + APPLIED.get()
-                + ", inline " + FELL_BACK.get();
+        return "staged populate queued " + held + ", submitted " + FeatureStats.total(FeatureStats.SUBMITTED)
+                + ", applied " + FeatureStats.total(FeatureStats.APPLIED);
     }
 
     /** For tests and status: a snapshot of the queue positions. */

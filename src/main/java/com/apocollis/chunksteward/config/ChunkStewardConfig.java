@@ -50,6 +50,24 @@ public class ChunkStewardConfig {
                 "build staged populate may also run with (lowercase hex, one per line, either class). The staged tail is a copy of",
                 "RTG-Plus 9.0.3's populate code, so only that build is accepted by default. Adding a hash accepts a build you checked."})
         public String[] extraRtgClassHashes = new String[0];
+
+        @Config.Comment({"Also run the mod world generators (Forge IWorldGenerator: ores, flowers, structures and the rest) of a",
+                "staged chunk on a terrain worker, after its decorations. They run in Forge's order and with Forge's per-chunk",
+                "seed. A generator that does something a worker cannot allow (tile entities, entities, reads outside the chunk",
+                "window) falls back to the server thread for that chunk and is demoted after demoteAfterAborts such aborts.",
+                "Only has an effect with enabled = true."})
+        public boolean modGenerators = true;
+
+        @Config.Comment({"Generator classes that always run on the server thread: a full class name, or a package prefix ending",
+                "in a dot. Use it for a generator that keeps global state, saves world data or talks to other threads;",
+                "those are the ones a worker cannot detect."})
+        public String[] serverOnlyGenerators = new String[] {
+                "hellfirepvp.astralsorcery.", "thaumcraft.", "thebetweenlands.", "ivorius.reccomplex."
+        };
+
+        @Config.Comment("Aborts or errors inside one generator class before it is demoted to the server thread for the session.")
+        @Config.RangeInt(min = 1, max = 100)
+        public int demoteAfterAborts = 3;
     }
 
     public static class Throttle {

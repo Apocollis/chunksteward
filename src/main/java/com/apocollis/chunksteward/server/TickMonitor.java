@@ -110,6 +110,9 @@ public final class TickMonitor {
                     String.format("%.2f", loadFactor()),
                     String.format("%.2f", ChunkThrottle.admissionFactor()));
             ChunkSteward.LOGGER.info("status: {}", GenMetrics.reportAndReset());
+            if (ChunkStewardConfig.features.enabled) {
+                ChunkSteward.LOGGER.info("status: {}", FeatureStats.reportAndReset());
+            }
             statGenerated = statSkipped = statBypassed = statPreloaded = statPreloadedTerrainOnly = 0L;
             statMaxEmergencyRadius = 0;
         }

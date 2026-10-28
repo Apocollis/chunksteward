@@ -43,6 +43,8 @@ final class FeatureScope {
     private final BlockPos.MutableBlockPos scratch = new BlockPos.MutableBlockPos();
     private final BlockPos.MutableBlockPos readPos = new BlockPos.MutableBlockPos();
     private volatile String abortReason;
+    private volatile String culprit;
+    private volatile String culpritGenerator;
     long reads;
 
     FeatureScope(World world, int cx, int cz, Chunk[] window) {
@@ -78,8 +80,22 @@ final class FeatureScope {
         return abortReason;
     }
 
+    /** The mod class behind the first abort: the generator that was running, else the first mod frame on the stack. */
+    String culprit() {
+        return culprit;
+    }
+
+    /** Class name of the mod generator that was running when the job aborted, or null. */
+    String culpritGenerator() {
+        return culpritGenerator;
+    }
+
     FeatureAbort abort(String reason) {
         if (abortReason == null) {
+            Class<?> generator = GeneratorPlan.running();
+            culpritGenerator = generator == null ? null : generator.getName();
+            culprit = culpritGenerator != null ? culpritGenerator
+                    : FeatureStats.culpritOf(new Throwable().getStackTrace());
             abortReason = reason;
         }
         return new FeatureAbort(reason);
@@ -138,7 +154,8 @@ final class FeatureScope {
             return false;
         }
         if (hasTileEntity(state) || hasTileEntity(old)) {
-            throw abort("tile entity block at " + x + "," + y + "," + z);
+            Block block = hasTileEntity(state) ? state.getBlock() : old.getBlock();
+            throw abort("tile entity block " + block.getRegistryName() + " at " + x + "," + y + "," + z);
         }
         journal.write(FeatureJournal.pack(x, y, z), state, flags);
         long column = FeatureJournal.pack(x, 0, z);

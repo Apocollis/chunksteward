@@ -53,6 +53,12 @@ public final class FeatureHooks {
         return scope == null ? null : Boolean.valueOf(scope.areaInRead(minX, minZ, maxX, maxZ));
     }
 
+    /** The chunk for a chunk-provider call from a feature job: inside the window, or an abort. Null on other threads. */
+    public static Chunk providerChunk(int chunkX, int chunkZ) {
+        FeatureScope scope = FeatureScope.current();
+        return scope == null ? null : scope.chunk(chunkX, chunkZ);
+    }
+
     public static Chunk chunk(int chunkX, int chunkZ) {
         FeatureScope scope = FeatureScope.current();
         return scope == null ? null : scope.chunk(chunkX, chunkZ);

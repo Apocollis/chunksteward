@@ -1,6 +1,7 @@
 package com.apocollis.chunksteward;
 
 import com.apocollis.chunksteward.server.ChunkStewardCommand;
+import com.apocollis.chunksteward.server.FeatureLogFilter;
 import com.apocollis.chunksteward.server.SessionState;
 import com.apocollis.chunksteward.server.TerrainPipeline;
 import net.minecraftforge.common.MinecraftForge;
@@ -23,6 +24,7 @@ public class ChunkSteward {
     @Mod.EventHandler
     public void serverStarting(FMLServerStartingEvent event) {
         SessionState.reset("server starting");
+        FeatureLogFilter.install();
         event.registerServerCommand(new ChunkStewardCommand());
         if (!busRegistered) {
             MinecraftForge.EVENT_BUS.register(this);

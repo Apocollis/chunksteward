@@ -2,11 +2,11 @@ package com.apocollis.chunksteward.rtg;
 
 import com.apocollis.chunksteward.server.FeatureJob;
 import com.apocollis.chunksteward.server.FeatureLane;
+import com.apocollis.chunksteward.server.GeneratorChain;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.IChunkGenerator;
-import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraft.util.math.ChunkPos;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
@@ -154,11 +154,16 @@ public final class RtgFeatures {
         public void run() {
             stage.beforeTail();
             generator.chunksteward$tail(stage.biome(), x, z, stage.hasVillage());
-            GameRegistry.generateWorld(x, z, world, (IChunkGenerator) generator, world.getChunkProvider());
-            Chunk chunk = world.getChunkProvider().getLoadedChunk(x, z);
-            if (chunk != null) {
-                chunk.markDirty();
-            }
+            // The mod generators: staged runs and server-thread runs in Forge's order; markDirty after the last one.
+            GeneratorChain.run(world, x, z, (IChunkGenerator) generator, new Runnable() {
+                @Override
+                public void run() {
+                    Chunk chunk = world.getChunkProvider().getLoadedChunk(x, z);
+                    if (chunk != null) {
+                        chunk.markDirty();
+                    }
+                }
+            });
         }
     }
 }

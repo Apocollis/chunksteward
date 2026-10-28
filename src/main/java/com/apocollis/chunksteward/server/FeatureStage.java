@@ -10,6 +10,11 @@ public interface FeatureStage {
     /** Short name for logs and metrics. */
     String name();
 
+    /** True when the stage uses the shared decoration objects and must hold {@link FeatureLane#decoLock()} while it runs. */
+    default boolean needsDecorationLock() {
+        return true;
+    }
+
     /**
      * Worker thread, inside the job's {@code FeatureScope}: every {@code World} call is answered from the scope.
      * {@code workerGenerator} is this worker's own copy of the dimension's generator.

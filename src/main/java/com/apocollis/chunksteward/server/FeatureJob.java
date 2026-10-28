@@ -32,6 +32,8 @@ public final class FeatureJob {
     final AtomicInteger state = new AtomicInteger(QUEUED);
     volatile FeatureScope scope;
     volatile String failure;
+    volatile String culprit;
+    volatile long workNanos;
 
     FeatureJob(WorldServer world, int x, int z, long seq, Chunk[] window, List<FeatureStage> stages,
                Runnable finish) {
