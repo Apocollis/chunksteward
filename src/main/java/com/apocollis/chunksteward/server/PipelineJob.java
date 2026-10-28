@@ -15,7 +15,9 @@ final class PipelineJob {
     final int z;
     final int epoch;
     final AtomicInteger state = new AtomicInteger(QUEUED);
+    final long createdNanos = System.nanoTime();
     volatile long claimedNanos;
+    volatile long doneNanos;
     volatile int workerSlot = -1;
     /** Preload or stage 2. Player demand clears this. Evicted first when the ready map is full. */
     volatile boolean speculative;

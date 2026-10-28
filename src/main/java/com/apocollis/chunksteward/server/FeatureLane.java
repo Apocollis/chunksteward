@@ -93,6 +93,7 @@ public final class FeatureLane {
             held = QUEUE.size();
         }
         FeatureStats.count(FeatureStats.SUBMITTED);
+        PipelineTrace.event("feature_submit", job.dimension, x, z, "queued " + held);
         TerrainPipeline.wakeWorkers();
         return job;
     }
@@ -371,6 +372,9 @@ public final class FeatureLane {
         int from = state == FeatureJob.DONE ? job.stages.size()
                 : (state == FeatureJob.FAILED && job.scope != null ? job.doneStages : 0);
         FeatureStats.waited(System.nanoTime() - job.createdNanos);
+        PipelineTrace.event("feature_apply", job.dimension, job.x, job.z, "waited "
+                + (System.nanoTime() - job.createdNanos) / 1_000_000L + "ms worker " + job.workNanos / 1_000_000L + "ms "
+                + (state == FeatureJob.DONE ? "ok" : "inline " + (job.failure == null ? "gave up" : job.failure.replace(',', ';'))));
         if (job.workNanos > 0L) {
             FeatureStats.work(job.workNanos);
         }

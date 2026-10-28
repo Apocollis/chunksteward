@@ -405,6 +405,11 @@ public class ChunkStewardConfig {
         @Config.RangeInt(min = 0, max = 3600)
         public int statusIntervalSeconds = 0;
 
+        @Config.Comment({"Write a per-chunk event trace of the generation pipeline to logs/chunksteward-trace.csv: when each",
+                "terrain job was claimed by a worker, finished, installed or generated on the server thread, and each staged",
+                "populate job. One line per event, capped at 400000 lines per session. Off by default."})
+        public boolean pipelineTrace = false;
+
         @Config.Comment({"TEMPORARY diagnostics, verbose: every second, why chunk provision calls were passed, bypassed,",
                 "admitted or deferred and what the populate gate did, plus a scan of the chunks around each player",
                 "(missing, loaded but unpopulated, and why). Every line starts with 'dbg': grep dbg latest.log."})

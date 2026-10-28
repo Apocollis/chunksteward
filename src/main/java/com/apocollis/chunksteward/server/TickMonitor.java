@@ -110,6 +110,10 @@ public final class TickMonitor {
                     String.format("%.2f", loadFactor()),
                     String.format("%.2f", ChunkThrottle.admissionFactor()));
             ChunkSteward.LOGGER.info("status: {}", GenMetrics.reportAndReset());
+            String pipelineLine = TerrainPipeline.reportAndReset();
+            if (pipelineLine != null) {
+                ChunkSteward.LOGGER.info("status: {}", pipelineLine);
+            }
             if (ChunkStewardConfig.features.enabled) {
                 ChunkSteward.LOGGER.info("status: {}", FeatureStats.reportAndReset());
             }

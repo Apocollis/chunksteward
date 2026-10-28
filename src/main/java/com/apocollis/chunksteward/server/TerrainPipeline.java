@@ -319,6 +319,16 @@ public final class TerrainPipeline {
                 + "; verify " + PipelineVerify.status();
     }
 
+    /** The status-log fragment for the pipeline's interval, or null when the pipeline is not running. */
+    static String reportAndReset() {
+        if (!run || killed || loliBlocked) {
+            return null;
+        }
+        return PipelineStats.reportAndReset(TABLE, threads.length, GUARD.cap(), TABLE.count(PipelineJob.QUEUED),
+                TABLE.count(PipelineJob.CLAIMED_WORKER) + TABLE.count(PipelineJob.CLAIMED_MAIN), TABLE.readyCount(),
+                threads.length);
+    }
+
     private static boolean engaged() {
         ChunkStewardConfig.Pipeline pipeline = ChunkStewardConfig.pipeline;
         return PipelineGate.engages(pipeline.enabled, killed, PipelineGate.hasGenerator(pipeline.allowedGenerators));
@@ -448,6 +458,9 @@ public final class TerrainPipeline {
         }
         GenSource.record(dimension, x, z, GenSource.SERVER);
         PipelineJob job = TABLE.jobAt(dimension, x, z);
+        PipelineStats.mainGenerated(dimension, x, z, job == null ? "no job queued"
+                : (job.state.get() == PipelineJob.CLAIMED_WORKER ? "worker still running, stolen back"
+                : (job.state.get() == PipelineJob.QUEUED ? "not started by a worker" : "job state " + job.state.get())));
         if (job != null && job.state.get() == PipelineJob.CLAIMED_WORKER) {
             long deadline = System.nanoTime() + ChunkStewardConfig.pipeline.stealWaitMs * 1_000_000L;
             while (job.state.get() == PipelineJob.CLAIMED_WORKER && System.nanoTime() < deadline) {
@@ -523,6 +536,7 @@ public final class TerrainPipeline {
         TABLE.takeReady(dimension, x, z);
         SPECULATIVE_READY.remove(key);
         noteInstall(System.nanoTime() - started);
+        PipelineStats.installed(job);
         return chunk;
     }
 
@@ -814,6 +828,7 @@ public final class TerrainPipeline {
                 }
                 job.claimedNanos = System.nanoTime();
                 job.workerSlot = slot;
+                PipelineStats.claimed(job);
                 generate(job);
             }
         }
@@ -824,7 +839,9 @@ public final class TerrainPipeline {
             if (job == null) {
                 return false;
             }
+            long started = System.nanoTime();
             FeatureLane.execute(job, slot);
+            PipelineStats.feature(slot, job, System.nanoTime() - started);
             return true;
         }
 
@@ -838,6 +855,8 @@ public final class TerrainPipeline {
                 return;
             }
             Chunk[] held = new Chunk[1];
+            long started = System.nanoTime();
+            boolean ok = false;
             PipelineMarker.set(true, false);
             PipelineMarker.biome(biome, job.dimension);
             PipelineMarker.context(job.context);
@@ -848,6 +867,8 @@ public final class TerrainPipeline {
                 }
                 PipelineKey key = new PipelineKey(job.dimension, job.x, job.z);
                 CHUNKS.put(key, held[0]);
+                job.doneNanos = System.nanoTime();
+                ok = true;
                 if (!TABLE.publish(job)) {
                     CHUNKS.remove(key, held[0]);
                 } else if (job.speculative) {
@@ -859,6 +880,7 @@ public final class TerrainPipeline {
                 ChunkSteward.LOGGER.warn("pipeline worker failed at {}, {} in {}", job.x, job.z, job.dimension, failed);
             } finally {
                 PipelineMarker.clear();
+                PipelineStats.generated(slot, job, System.nanoTime() - started, ok);
             }
         }
     }

@@ -15,6 +15,21 @@ Line 2 (`GenMetrics`): `stages: terrain X ms/N, populate X ms/N (world generator
 - **Cascades:** a chunk generated while a populate is running, charged to the innermost running `IWorldGenerator` class: `cascades by generator: class N, ...` (top 3).
 - **Wait:** time from `PlayerChunkMapEntry` construction to the first `providePlayerChunk` that returns true in `PlayerChunkMap.tick`. Entries whose chunk arrives through Forge's async disk load callback are not sampled. Entries are kept in a `WeakHashMap`, so removed entries are not retained.
 
+## Pipeline and staged populate lines
+
+When the terrain pipeline runs, a third line follows (`PipelineStats`):
+
+`status: pipeline: workers N (cap C), queued Q, in flight F, ready R; terrain jobs J (P for players), worker avg X ms max Y ms; busy #0 terrain A% staged B% | #1 ...; waited to start avg ... ms max ... ms, ready before install avg ... ms max ... ms; installed I, stolen back S, discarded D, failed X, generated on server thread G`
+
+- `queued`/`in flight`/`ready` are the table's state when the line is written: jobs not yet claimed, being generated (by a worker or claimed by the server thread), and finished but not installed.
+- `busy` per worker: share of the interval spent on terrain jobs and on staged populate jobs. A worker well under 100% in total while `queued` is large means the workers are not the limit (the CPU guard cap, the ranking window `pipeline.maxInFlight`, or `pipeline.maxReady` is).
+- `waited to start`: queue time before a worker claimed a terrain job. `ready before install`: how long a finished chunk waited for the server thread to take it. A large second number means the throttle, not the workers, is slow.
+- `stolen back` and `generated on server thread`: chunks the server thread had to generate itself because no worker had started them, or a running one took too long (`pipeline.stealWaitMs`).
+
+With `features.enabled` a `staged populate:` line follows; see [staged-populate.md](staged-populate.md).
+
+`logging.pipelineTrace = true` also writes `logs/chunksteward-trace.csv` (`ms,event,dimension,x,z,detail`): `claim` (worker slot, queue wait), `done` or `fail` (worker time), `install` (ready wait), `server` (generated on the server thread, and why), `feature_submit`, `feature_apply` (wait, worker time, ok or why it ran inline). Sort by chunk to follow one chunk through the pipeline. Capped at 400000 lines per session; events are dropped, not delayed, when the writer is behind.
+
 ## RTG-Plus
 
 When RTG-Plus chunks populate, the populate line ends with `rtg windows N (nested cancelled M)`: N outer passes admitted, M re-entrant passes cancelled. Before RTG-Plus support the populate stage showed `0.0 ms/0` on RTG terrain. The generator-populate split (generator populate / structures / world generators / other) works as for vanilla chunks.
