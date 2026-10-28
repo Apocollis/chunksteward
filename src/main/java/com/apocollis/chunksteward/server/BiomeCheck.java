@@ -71,27 +71,12 @@ final class BiomeCheck {
         return different == 0 ? null : different + " of 576 points differ, first " + first;
     }
 
-    /** Index of the first sample point where the two answers differ, or -1 when they agree (or one is missing). */
     static int firstDifference(short[] worker, short[] server) {
-        if (worker == null || server == null || worker.length != server.length) {
-            return -1;
-        }
-        for (int i = 0; i < worker.length; i++) {
-            if (worker[i] != server[i]) {
-                return i;
-            }
-        }
-        return -1;
+        return BiomeSamples.firstDifference(worker, server);
     }
 
     static int differing(short[] worker, short[] server) {
-        int count = 0;
-        for (int i = 0; i < worker.length; i++) {
-            if (worker[i] != server[i]) {
-                count++;
-            }
-        }
-        return count;
+        return BiomeSamples.differing(worker, server);
     }
 
     /** Logs the first mismatches in a session with enough detail to tell which provider is off. */
