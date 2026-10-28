@@ -457,7 +457,7 @@ public class ChunkStewardConfig {
 
         @Config.Comment("Server thread milliseconds per tick spent taking biome snapshots (at least one per tick).")
         @Config.RangeInt(min = 1, max = 20)
-        public int biomeSnapshotMs = 3;
+        public int biomeSnapshotMs = 8;
 
         @Config.Comment({"Blocks around the chunk a snapshot covers. RTG-Plus reads biomes from -64 to +100 blocks around the chunk",
                 "origin; a lookup outside the snapshot is answered by the worker's own copy and counted in the status line."})

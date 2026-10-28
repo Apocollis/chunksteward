@@ -40,6 +40,8 @@ public final class FeatureStats {
 
     private static final AtomicLongArray INTERVAL = new AtomicLongArray(COUNTERS);
     private static final AtomicLongArray TOTAL = new AtomicLongArray(COUNTERS);
+    private static final AtomicLong APPLY_NANOS = new AtomicLong();
+    private static final AtomicLong APPLY_JOBS = new AtomicLong();
     private static final AtomicLong WORK_NANOS = new AtomicLong();
     private static final AtomicLong WORK_JOBS = new AtomicLong();
     private static final AtomicLong WAIT_NANOS = new AtomicLong();
@@ -63,6 +65,12 @@ public final class FeatureStats {
     static void work(long nanos) {
         WORK_NANOS.addAndGet(nanos);
         WORK_JOBS.incrementAndGet();
+    }
+
+    /** Server thread time one staged job's apply took (replay, the rest of populate, the server-side generators). */
+    static void applyTime(long nanos) {
+        APPLY_NANOS.addAndGet(nanos);
+        APPLY_JOBS.incrementAndGet();
     }
 
     static void waited(long nanos) {
@@ -178,6 +186,7 @@ public final class FeatureStats {
         out.append("; worker avg ").append(avgMs(workNanos, workJobs))
                 .append(" ms over ").append(workJobs)
                 .append(", wait avg ").append(avgMs(waitNanos, waitJobs)).append(" ms over ").append(waitJobs)
+                .append(", apply on the server thread avg ").append(avgMs(APPLY_NANOS.getAndSet(0L), APPLY_JOBS.getAndSet(0L))).append(" ms")
                 .append("; session: submitted ").append(TOTAL.get(SUBMITTED))
                 .append(", on worker ").append(TOTAL.get(WORKER_OK))
                 .append(", inline ").append(TOTAL.get(INLINE_TILE) + TOTAL.get(INLINE_WINDOW)

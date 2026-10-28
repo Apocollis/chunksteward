@@ -376,6 +376,15 @@ public final class FeatureLane {
 
     /** Applies one finished job: the recorded writes (or the stages inline), then the rest of the chunk's populate. */
     private static void apply(FeatureJob job) {
+        long applyStarted = System.nanoTime();
+        try {
+            applyJob(job);
+        } finally {
+            FeatureStats.applyTime(System.nanoTime() - applyStarted);
+        }
+    }
+
+    private static void applyJob(FeatureJob job) {
         Chunk center = job.center();
         int state = job.state.get();
         boolean fallBack = state != FeatureJob.DONE;

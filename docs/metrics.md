@@ -24,6 +24,7 @@ When the terrain pipeline runs, a third line follows (`PipelineStats`):
 - `queued`/`in flight`/`ready` are the table's state when the line is written: jobs not yet claimed, being generated (by a worker or claimed by the server thread), and finished but not installed.
 - `busy` per worker: share of the interval spent on terrain jobs and on staged populate jobs. A worker well under 100% in total while `queued` is large means the workers are not the limit (the CPU guard cap, the ranking window `pipeline.maxInFlight`, or `pipeline.maxReady` is).
 - `waited to start`: queue time before a worker claimed a terrain job. `ready before install`: how long a finished chunk waited for the server thread to take it. A large second number means the throttle, not the workers, is slow.
+- `player chunks`: what the player-chunk provision did with the chunks players wait for: finished worker chunks installed, urgent (emergency radius or login warmup) generated at once, starved (one per `throttle.maxStarveTicks` when none was admitted); and what it deferred: not finished (a worker has not produced it), headroom (finished, but the tick has no room), saving, loading.
 - `stolen back` and `generated on server thread`: chunks the server thread had to generate itself because no worker had started them, or a running one took too long (`pipeline.stealWaitMs`).
 
 With `features.enabled` a `staged populate:` line follows; see [staged-populate.md](staged-populate.md).

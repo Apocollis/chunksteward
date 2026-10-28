@@ -941,7 +941,7 @@ public final class TerrainPipeline {
                 PipelineKey key = new PipelineKey(job.dimension, job.x, job.z);
                 CHUNKS.put(key, held[0]);
                 job.doneNanos = System.nanoTime();
-                if (ChunkStewardConfig.pipeline.biomeCheck) {
+                if (ChunkStewardConfig.pipeline.biomeCheck && job.biomeSnapshot == null) {
                     job.biomeSamples = BiomeCheck.sample(used, job.x, job.z);
                 }
                 ok = true;

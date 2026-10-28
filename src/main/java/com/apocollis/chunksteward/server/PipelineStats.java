@@ -26,6 +26,14 @@ final class PipelineStats {
     private static final AtomicLong SNAPSHOTS = new AtomicLong();
     private static final AtomicLong SNAPSHOT_NANOS = new AtomicLong();
     private static final AtomicLong SNAPSHOT_MISSES = new AtomicLong();
+    static final int PROVIDE_INSTALLED = 0;
+    static final int PROVIDE_URGENT = 1;
+    static final int PROVIDE_STARVED = 2;
+    static final int PROVIDE_NOT_FINISHED = 3;
+    static final int PROVIDE_HEADROOM = 4;
+    static final int PROVIDE_SAVING = 5;
+    static final int PROVIDE_LOADING = 6;
+    private static final AtomicLongArray PROVIDE = new AtomicLongArray(8);
     private static final AtomicLong BIOME_CHECKED = new AtomicLong();
     private static final AtomicLong BIOME_MISMATCH = new AtomicLong();
     private static final AtomicLong BIOME_MISMATCH_TOTAL = new AtomicLong();
@@ -90,6 +98,11 @@ final class PipelineStats {
     /** A worker asked its snapshot for a biome outside it (or a layer it does not hold). Any thread. */
     static void snapshotMiss() {
         SNAPSHOT_MISSES.incrementAndGet();
+    }
+
+    /** What the player-chunk provision did with a chunk it was asked about (any thread that calls provide: the server's). */
+    static void provide(int kind) {
+        PROVIDE.incrementAndGet(kind);
     }
 
     static void biomeChecked() {
@@ -172,6 +185,13 @@ final class PipelineStats {
         lastStolen = stolen;
         lastDiscarded = discarded;
         lastFailed = failed;
+        out.append("; player chunks: installed finished ").append(PROVIDE.getAndSet(PROVIDE_INSTALLED, 0L))
+                .append(", urgent ").append(PROVIDE.getAndSet(PROVIDE_URGENT, 0L))
+                .append(", starved ").append(PROVIDE.getAndSet(PROVIDE_STARVED, 0L))
+                .append("; deferred not finished ").append(PROVIDE.getAndSet(PROVIDE_NOT_FINISHED, 0L))
+                .append(", headroom ").append(PROVIDE.getAndSet(PROVIDE_HEADROOM, 0L))
+                .append(", saving ").append(PROVIDE.getAndSet(PROVIDE_SAVING, 0L))
+                .append(", loading ").append(PROVIDE.getAndSet(PROVIDE_LOADING, 0L));
         long snapshots = SNAPSHOTS.getAndSet(0L);
         out.append("; biome snapshots ").append(snapshots).append(" (avg ").append(ms2(SNAPSHOT_NANOS.getAndSet(0L), snapshots))
                 .append(" ms on the server thread, ").append(SNAPSHOT_MISSES.getAndSet(0L)).append(" lookups outside one)");

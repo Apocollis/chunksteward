@@ -123,6 +123,7 @@ public final class ChunkThrottle {
      */
     private static boolean providePipelined(PlayerChunkMap map, PlayerChunkMapEntry entry, boolean debug) {
         if (((AccessorPlayerChunkMapEntry) entry).chunksteward$loading()) {
+            PipelineStats.provide(PipelineStats.PROVIDE_LOADING);
             if (debug) {
                 Diagnostics.provide("deferred: loading", map, entry, true);
             }
@@ -130,6 +131,7 @@ public final class ChunkThrottle {
         }
         boolean urgent = urgent(entry);
         if (!urgent && TickMonitor.savePaused()) {
+            PipelineStats.provide(PipelineStats.PROVIDE_SAVING);
             TickMonitor.countSkipped();
             if (debug) {
                 Diagnostics.provide("deferred: save", map, entry, true);
@@ -138,6 +140,7 @@ public final class ChunkThrottle {
         }
         boolean finished = TerrainPipeline.ready(map.getWorldServer(), entry.getPos().x, entry.getPos().z);
         if (!urgent && !finished && !starvationDue()) {
+            PipelineStats.provide(PipelineStats.PROVIDE_NOT_FINISHED);
             TickMonitor.countSkipped();
             if (debug) {
                 Diagnostics.provide("deferred: pipeline", map, entry, true);
@@ -145,6 +148,7 @@ public final class ChunkThrottle {
             return false;
         }
         if (!urgent && finished && !withinBudget()) {
+            PipelineStats.provide(PipelineStats.PROVIDE_HEADROOM);
             TickMonitor.countSkipped();
             if (debug) {
                 Diagnostics.provide("deferred: headroom", map, entry, true);
@@ -154,6 +158,8 @@ public final class ChunkThrottle {
         if (urgent) {
             TickMonitor.countBypassed();
         }
+        PipelineStats.provide(urgent ? PipelineStats.PROVIDE_URGENT
+                : (finished ? PipelineStats.PROVIDE_INSTALLED : PipelineStats.PROVIDE_STARVED));
         if (debug) {
             Diagnostics.provide(finished ? "admitted: pipeline" : "admitted", map, entry, true);
         }
