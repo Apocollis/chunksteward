@@ -96,7 +96,7 @@ public abstract class MixinLatePopulatingChunk {
     @Inject(method = "doPopulate(Lnet/minecraft/world/chunk/Chunk;Lnet/minecraft/world/gen/IChunkGenerator;)V",
             at = @At("RETURN"), remap = false)
     private static void chunksteward$stageEnd(Chunk chunk, IChunkGenerator generator, CallbackInfo ci) {
-        RtgFeatures.exitDoPopulate();
+        RtgFeatures.exitDoPopulate(chunk);
     }
 
     /** The mod generators run after the staged decorations are applied, from the job's finish. */
