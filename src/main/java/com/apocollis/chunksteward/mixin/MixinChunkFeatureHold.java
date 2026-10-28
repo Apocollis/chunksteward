@@ -16,7 +16,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * One int read while no staged work is queued.
  */
 @Mixin(value = Chunk.class, priority = 500)
-public abstract class MixinChunkFeatureHold {
+public abstract class MixinChunkFeatureHold implements ChunkChanges {
+
+    /** Block changes to this chunk since it loaded; the light audit compares it before and after a worker's pass. */
+    @org.spongepowered.asm.mixin.Unique
+    private volatile int chunksteward$changes;
+
+    @Override
+    public int chunksteward$changes() {
+        return chunksteward$changes;
+    }
 
     /** Priority 500 so this runs before Depths Update's replacement of the method. */
     @Inject(method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)"
@@ -24,6 +33,7 @@ public abstract class MixinChunkFeatureHold {
     private void chunksteward$featureDirectWrite(BlockPos pos, IBlockState state,
                                                  CallbackInfoReturnable<IBlockState> cir) {
         FeatureHooks.chunkWrite();
+        chunksteward$changes++;
     }
 
     @Inject(method = "isPopulated()Z", at = @At("HEAD"), cancellable = true)

@@ -920,7 +920,14 @@ public final class TerrainPipeline {
         private boolean runFeature() {
             FeatureJob job = FeatureLane.takeForWorker();
             if (job == null) {
-                return false;
+                LightAudit.Job audit = LightAudit.takeForWorker();
+                if (audit == null) {
+                    return false;
+                }
+                long auditStarted = System.nanoTime();
+                LightAudit.execute(audit);
+                PipelineStats.feature(slot, null, System.nanoTime() - auditStarted);
+                return true;
             }
             long started = System.nanoTime();
             FeatureLane.execute(job, slot);

@@ -46,7 +46,7 @@ public class ChunkStewardCommand extends CommandBase {
     @Override
     public String getUsage(ICommandSender sender) {
         return "/chunksteward <status | chunkinfo [x z] | queue | holds | log <seconds> | pregen <pause|resume>"
-                + " | light verify [chunks] | pipeline <status|off|on|verify <count> [dimension]> | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
+                + " | light <verify [chunks] | fix [radius] | status> | pipeline <status|off|on|verify <count> [dimension]> | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
     }
 
     @Override
@@ -266,8 +266,22 @@ public class ChunkStewardCommand extends CommandBase {
     // ---- queue, holds, log, pregen ----------------------------------------------------------------------------------
 
     private static void light(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException {
+        if (args.length >= 2 && "fix".equalsIgnoreCase(args[1])) {
+            int radius = args.length >= 3 ? parseInt(args[2], 1, 24) : 6;
+            WorldServer world = worldOf(server, sender);
+            int queued = LightAudit.submit(world, sender.getCommandSenderEntity(), radius);
+            send(sender, "light fix: " + queued + " windows of 2x2 chunks queued for the workers within " + radius
+                    + " chunks (/chunksteward light status to follow it)");
+            return;
+        }
+        if (args.length >= 2 && "status".equalsIgnoreCase(args[1])) {
+            for (String line : LightAudit.describe()) {
+                send(sender, line);
+            }
+            return;
+        }
         if (args.length < 2 || !"verify".equalsIgnoreCase(args[1])) {
-            throw new WrongUsageException("/chunksteward light verify [chunks]   (compares worker light with the light loaded chunks hold)");
+            throw new WrongUsageException("/chunksteward light <verify [chunks] | fix [radius] | status>");
         }
         int count = args.length >= 3 ? parseInt(args[2], 1, 60) : 6;
         WorldServer world = worldOf(server, sender);

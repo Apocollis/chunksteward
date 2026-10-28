@@ -41,3 +41,12 @@ A column's height is one above its highest cell with opacity above zero. Because
 
 1. `/chunksteward light verify 10` near populated, lit chunks. It prints the number of nibbles compared and how many differ (sky and block, and how many the worker has darker), with the first differing cells and their blocks. A handful of differences at chunk edges or around lava and glowstone is normal for vanilla's updater; thousands are a bug.
 2. Turn `features.lightStage` on and compare the `pipeline:` and `staged populate:` lines: the apply time on the server thread should fall and the Tweaks `PopulateRelight.replay` share of the thread should shrink.
+
+## Audit and fix (`/chunksteward light fix [radius]`)
+
+The same engine can audit chunks that are already loaded. `light verify` showed block light missing near real emitters (fire, torch fungus, lava) in a world generated without the stage, so the audit finds those cells and fixes them.
+
+- The server thread picks stride-2 2x2 windows around you and hands each to a terrain worker when it is idle (audits run behind generation work). The worker reads the window's blocks, computes sky and block light with the engine and returns the arrays.
+- At tick end (3 ms budget) the server installs a result only if none of the window's chunks was replaced, held by a staged job, or had a block change since the audit began (`ChunkChanges` counts direct block writes per chunk). Otherwise the result is dropped and counted as "changed".
+- An install uses the same code as the light stage, queues boundary `checkLight`s, and resends the changed sections: the client only receives light inside chunk data, so 64 distinct block changes in a section make the player map send it again.
+- `light status` prints queued, running, audited, fixed, clean, changed and failed counts. Sections below Y 0 are installed but not resent.

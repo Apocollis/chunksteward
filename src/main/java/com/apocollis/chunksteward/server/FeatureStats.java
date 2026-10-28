@@ -39,7 +39,12 @@ public final class FeatureStats {
     static final int LIGHT_INSTALLED = 15;
     static final int LIGHT_FALLBACK = 16;
     static final int LIGHT_BOUNDARY = 17;
-    private static final int COUNTERS = 18;
+    static final int AUDIT_FIXED = 18;
+    static final int AUDIT_CLEAN = 19;
+    static final int AUDIT_CHANGED = 20;
+    static final int AUDIT_FAILED = 21;
+    static final int AUDIT_CHUNKS = 22;
+    private static final int COUNTERS = 23;
 
     private static final AtomicLongArray INTERVAL = new AtomicLongArray(COUNTERS);
     private static final AtomicLongArray TOTAL = new AtomicLongArray(COUNTERS);

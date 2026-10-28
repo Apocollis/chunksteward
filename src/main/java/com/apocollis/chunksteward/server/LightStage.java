@@ -95,7 +95,17 @@ final class LightStage implements FeatureStage {
     }
 
     private void installChunk(Chunk chunk, LightResult light, int index, boolean center) {
-        // Heights of the columns the job wrote to, exactly as the worker's height map rule left them.
+        installHeights(chunk, light);
+        installArrays(chunk, light, index);
+        // The centre chunk's own populate is what this light finishes; a neighbour only when its populate has started.
+        if (center || chunk.isTerrainPopulated()) {
+            chunk.setLightPopulated(true);
+        }
+        chunk.markDirty();
+    }
+
+    /** Heights of the columns the job wrote to, exactly as the worker's height map rule left them. */
+    private static void installHeights(Chunk chunk, LightResult light) {
         int[] heightMap = chunk.getHeightMap();
         int[] precipitation = ((AccessorChunk) chunk).chunksteward$precipitationHeightMap();
         for (int c = 0; c < light.heightX.length; c++) {
@@ -113,8 +123,17 @@ final class LightStage implements FeatureStage {
             lowest = Math.min(lowest, h);
         }
         ((AccessorChunk) chunk).chunksteward$setHeightMapMinimum(lowest);
+    }
 
-        for (ExtendedBlockStorage storage : chunk.getBlockStorageArray()) {
+    /**
+     * Replaces the sections' light arrays with the worker's where they differ. Returns a bit per section index of the
+     * chunk's storage array whose light changed (the caller resends those to players).
+     */
+    static int installArrays(Chunk chunk, LightResult light, int index) {
+        int changed = 0;
+        ExtendedBlockStorage[] storages = chunk.getBlockStorageArray();
+        for (int s = 0; s < storages.length; s++) {
+            ExtendedBlockStorage storage = storages[s];
             if (storage == Chunk.NULL_BLOCK_STORAGE) {
                 continue;
             }
@@ -123,19 +142,18 @@ final class LightStage implements FeatureStage {
                 continue;
             }
             byte[] blockData = light.block[index][section];
-            if (blockData != null) {
+            if (blockData != null && !java.util.Arrays.equals(blockData, storage.getBlockLight().getData())) {
                 storage.setBlockLight(new NibbleArray(blockData.clone()));
+                changed |= 1 << s;
             }
             byte[] skyData = light.sky[index][section];
-            if (skyData != null && storage.getSkyLight() != null) {
+            if (skyData != null && storage.getSkyLight() != null
+                    && !java.util.Arrays.equals(skyData, storage.getSkyLight().getData())) {
                 storage.setSkyLight(new NibbleArray(skyData.clone()));
+                changed |= 1 << s;
             }
         }
-        // The centre chunk's own populate is what this light finishes; a neighbour only when its populate has started.
-        if (center || chunk.isTerrainPopulated()) {
-            chunk.setLightPopulated(true);
-        }
-        chunk.markDirty();
+        return changed;
     }
 
     static boolean wanted() {
