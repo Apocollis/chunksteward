@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,6 +56,30 @@ class PipelineTest {
         assertEquals(2, PipelineRank.speculativeKept(14, 4, 16));
         assertEquals(4, PipelineRank.speculativeKept(0, 4, 16));
         assertEquals(0, PipelineRank.speculativeKept(3, 4, 0));
+    }
+
+    @Test
+    void submitKeepsAFinishedResultThatWaitsForInstall() {
+        PipelineTable table = new PipelineTable();
+        PipelineJob job = table.submit(0, 4, 4);
+        assertTrue(table.claimWorker(job));
+        assertTrue(table.publish(job));
+        // Every tick's ranking submits the chunks players still wait for, including this one.
+        assertSame(job, table.submit(0, 4, 4));
+        assertSame(job, table.readyAt(0, 4, 4));
+        assertEquals(0L, table.discarded.get());
+    }
+
+    @Test
+    void submitAfterInstallStartsANewJob() {
+        PipelineTable table = new PipelineTable();
+        PipelineJob job = table.submit(0, 5, 5);
+        assertTrue(table.claimWorker(job));
+        assertTrue(table.publish(job));
+        assertSame(job, table.takeReady(0, 5, 5));
+        PipelineJob again = table.submit(0, 5, 5);
+        assertNotSame(job, again);
+        assertEquals(PipelineJob.QUEUED, again.state.get());
     }
 
     @Test

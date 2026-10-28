@@ -53,6 +53,12 @@ final class PipelineTable {
                 continue;
             }
             int state = existing.state.get();
+            // A finished job whose result still waits in the ready map is the answer: replacing it would throw the
+            // chunk away and generate it again every tick the server has not installed it yet.
+            boolean waiting = state == PipelineJob.DONE && existing.epoch == epoch && ready.get(key) == existing;
+            if (waiting) {
+                return existing;
+            }
             if (existing.epoch != epoch || state == PipelineJob.DONE || state == PipelineJob.CANCELLED) {
                 if (jobs.replace(key, existing, created)) {
                     ready.remove(key, existing);
