@@ -455,6 +455,17 @@ public class ChunkStewardConfig {
                 "A worker waits for the snapshot before it starts a chunk. Costs about 2 to 4 ms of server thread per chunk."})
         public boolean biomeSnapshot = true;
 
+        @Config.Comment({"Run Depths Update's work on a new chunk (the deep fill, caves, underground rivers and the sky light map)",
+                "on the terrain worker, so the server thread only installs the finished chunk. Needs the Depths Update build",
+                "this code was written against (a12) and the hook that lets the server skip Depths' own pass; otherwise it stays",
+                "off and Depths runs on the server thread as before."})
+        public boolean depthsPass = true;
+
+        @Config.Comment({"SHA-256 (lowercase hex) of the MixinChunkProviderServer class file inside a Depths Update jar, for a build",
+                "the worker pass may also run with. The pass is a copy of that handler in 1.12.2-1.0.0-a12, so only that build is",
+                "accepted by default."})
+        public String[] extraDepthsClassHashes = new String[0];
+
         @Config.Comment("Server thread milliseconds per tick spent taking biome snapshots (at least one per tick).")
         @Config.RangeInt(min = 1, max = 20)
         public int biomeSnapshotMs = 8;

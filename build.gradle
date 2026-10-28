@@ -108,6 +108,9 @@ tasks.register('verifyReleaseJar') {
             if (zip.getEntry("mixins.chunksteward.early.json") == null) {
                 throw new GradleException("mixins.chunksteward.early.json missing from remapped jar")
             }
+            if (zip.getEntry("mixins.chunksteward.depths.json") == null) {
+                throw new GradleException("mixins.chunksteward.depths.json missing from remapped jar")
+            }
             if (zip.getEntry("mixins.chunksteward.rtg.json") == null) {
                 throw new GradleException("mixins.chunksteward.rtg.json missing from remapped jar")
             }
@@ -139,13 +142,14 @@ tasks.register('verifyReleaseJar') {
                 // Generator mods are compile-only (libs/mods). Only late, class-gated mixin configs and the loader's
                 // presence probes may name their types; anything else would fail to load in a pack without the mod.
                 def lateOnly = ["com/apocollis/chunksteward/mixin/dims/", "com/apocollis/chunksteward/mixin/endexpansion/",
-                                "com/apocollis/chunksteward/mixin/rtg/", "com/apocollis/chunksteward/ChunkStewardLateMixinLoader"]
+                                "com/apocollis/chunksteward/mixin/rtg/", "com/apocollis/chunksteward/depths/",
+                                "com/apocollis/chunksteward/ChunkStewardLateMixinLoader"]
                 if (lateOnly.any { e.name.startsWith(it) }) {
                     return
                 }
                 def text = new String(bytes, "ISO-8859-1")
                 ["git/jbredwards/", "logictechcorp/", "com/example/structure/", "com/shiroroku/", "com/teammetallurgy/",
-                 "thebetweenlands/", "com/apocollis/aqtweaks/"].each { pkg ->
+                 "thebetweenlands/", "sayys/depthsupdate/", "com/apocollis/aqtweaks/"].each { pkg ->
                     if (text.contains(pkg)) {
                         throw new GradleException("${e.name} references ${pkg}; generator mods are optional, so only " +
                                 "class-gated mixin configs may name their types (look them up by name instead)")

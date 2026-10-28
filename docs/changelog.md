@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.1
+- Depths Update's work on a new chunk (deep fill, caves, underground rivers, sky light map) runs on the terrain worker (`pipeline.depthsPass`, default on) and the server thread skips Depths' own pass for a chunk a worker finished. Needs Depths Update 1.12.2-1.0.0-a12 (class hash) and the skip hook; otherwise it stays off. See `docs/pipeline.md`.
 - Status line: `player chunks` counts (installed, urgent, starved; deferred not finished, headroom, saving, loading) and the server-thread time of a staged job's apply. `pipeline.biomeSnapshotMs` default is 8 (3 capped chunk starts at about three per tick when ticks are long), and the biome sample check is skipped for jobs that generated from a snapshot.
 - Staged populate blocks a second RTG populate of the same loaded chunk object and logs why it was asked (`repeat populates blocked` in the status line). A trace showed a few chunks populated again every tick, which cost most of the staged populate work.
 - Terrain workers generate from a biome snapshot taken on the server thread from the dimension's own biome provider (`pipeline.biomeSnapshot`, `biomeSnapshotMs`, `biomeSnapshotRadius`), so a mod that builds the biome layout from stateful layers (Geographicraft / Climate Control) cannot give a worker a different layout from the server's. A guardrail compares samples when a worker chunk is installed and discards a chunk whose biomes differ (`pipeline.biomeCheck`); a worker's own provider copy is compared with the server's when it is built. See `docs/pipeline.md`.

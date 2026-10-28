@@ -22,6 +22,8 @@ final class PipelineJob {
     volatile short[] biomeSamples;
     /** The server thread's biomes around the chunk, which the worker generates from, or null ({@link BiomeSnapshot}). */
     volatile BiomeSnapshot biomeSnapshot;
+    /** The worker also ran Depths Update's pass on this chunk, so the server must not ({@code DepthsBridge}). */
+    volatile boolean depthsDone;
     volatile int workerSlot = -1;
     /** Preload or stage 2. Player demand clears this. Evicted first when the ready map is full. */
     volatile boolean speculative;

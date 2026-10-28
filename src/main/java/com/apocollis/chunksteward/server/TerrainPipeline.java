@@ -2,6 +2,7 @@ package com.apocollis.chunksteward.server;
 
 import com.apocollis.chunksteward.ChunkSteward;
 import com.apocollis.chunksteward.config.ChunkStewardConfig;
+import com.apocollis.chunksteward.depths.DepthsBridge;
 import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMap;
 import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMapEntry;
 import com.sun.management.OperatingSystemMXBean;
@@ -497,6 +498,16 @@ public final class TerrainPipeline {
         return !DISALLOWED.contains(generator.getClass().getName());
     }
 
+    /** True when a finished worker chunk waits for this chunk and the worker also ran Depths Update's pass on it. */
+    public static boolean readyWithDepthsPass(World world, int x, int z) {
+        if (world == null) {
+            return false;
+        }
+        PipelineJob job = TABLE.readyAt(world.provider.getDimension(), x, z);
+        return job != null && job.depthsDone && job.state.get() == PipelineJob.DONE
+                && job.epoch == TABLE.epoch(job.dimension);
+    }
+
     static boolean ready(World world, int x, int z) {
         if (world == null) {
             return false;
@@ -927,6 +938,7 @@ public final class TerrainPipeline {
                 return;
             }
             Chunk[] held = new Chunk[1];
+            Object depthsToken = null;
             long started = System.nanoTime();
             boolean ok = false;
             PipelineMarker.set(true, false);
@@ -934,9 +946,21 @@ public final class TerrainPipeline {
             PipelineMarker.biome(used, job.dimension);
             PipelineMarker.context(job.context);
             try {
-                BedrockShim.run(world, () -> held[0] = generator.generateChunk(job.x, job.z));
+                if (DepthsBridge.enabled()) {
+                    depthsToken = DepthsBridge.begin(world, generator);
+                    try {
+                        held[0] = generator.generateChunk(job.x, job.z);
+                    } finally {
+                        DepthsBridge.end(depthsToken);
+                    }
+                } else {
+                    BedrockShim.run(world, () -> held[0] = generator.generateChunk(job.x, job.z));
+                }
                 if (held[0] == null) {
                     throw new IllegalStateException("generateChunk returned null");
+                }
+                if (depthsToken != null) {
+                    job.depthsDone = DepthsBridge.finish(depthsToken, world, held[0], job.x, job.z, slot);
                 }
                 PipelineKey key = new PipelineKey(job.dimension, job.x, job.z);
                 CHUNKS.put(key, held[0]);

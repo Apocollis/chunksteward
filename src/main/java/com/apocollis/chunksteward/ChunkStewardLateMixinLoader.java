@@ -20,6 +20,8 @@ import java.util.zip.ZipFile;
  */
 public class ChunkStewardLateMixinLoader implements ILateMixinLoader {
     static final String RTG_CONFIG = "mixins.chunksteward.rtg.json";
+    static final String DEPTHS_CONFIG = "mixins.chunksteward.depths.json";
+    private static final String DEPTHS_CLASS_ENTRY = "sayys/depthsupdate/mixin/MixinChunkProviderServer.class";
     private static final String RTG_CLASS_ENTRY = "rtg/world/gen/LatePopulatingChunk.class";
 
     private static final Map<String, String> DIMENSION_CONFIGS = new LinkedHashMap<String, String>();
@@ -51,6 +53,7 @@ public class ChunkStewardLateMixinLoader implements ILateMixinLoader {
     public List<String> getMixinConfigs() {
         List<String> configs = new ArrayList<String>();
         configs.add(RTG_CONFIG);
+        configs.add(DEPTHS_CONFIG);
         configs.addAll(DIMENSION_CONFIGS.keySet());
         return configs;
     }
@@ -59,6 +62,9 @@ public class ChunkStewardLateMixinLoader implements ILateMixinLoader {
     public boolean shouldMixinConfigQueue(String mixinConfig) {
         if (RTG_CONFIG.equals(mixinConfig)) {
             return modHasClass("rtg", RTG_CLASS_ENTRY);
+        }
+        if (DEPTHS_CONFIG.equals(mixinConfig)) {
+            return modHasClass("depthsupdate", DEPTHS_CLASS_ENTRY);
         }
         String entry = DIMENSION_CONFIGS.get(mixinConfig);
         if (entry == null) {
