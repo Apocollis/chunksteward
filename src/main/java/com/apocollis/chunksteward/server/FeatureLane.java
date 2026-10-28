@@ -148,6 +148,17 @@ public final class FeatureLane {
         return false;
     }
 
+    /** A populate of a chunk object that already populated was blocked ({@code RtgFeatures.repeatedPopulate}). */
+    public static void countRepeat() {
+        FeatureStats.count(FeatureStats.REPEAT_BLOCKED);
+    }
+
+    /** The first mod frame of a stack, for log lines. */
+    public static String callerOf(StackTraceElement[] stack) {
+        String culprit = FeatureStats.culpritOf(stack);
+        return culprit != null ? culprit : "(no mod frame)";
+    }
+
     public static int queued() {
         return held;
     }

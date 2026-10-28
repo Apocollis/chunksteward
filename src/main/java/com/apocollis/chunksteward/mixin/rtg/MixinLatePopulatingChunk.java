@@ -56,6 +56,10 @@ public abstract class MixinLatePopulatingChunk {
             ci.cancel();
             return;
         }
+        if (RtgFeatures.repeatedPopulate(chunk)) {
+            ci.cancel();
+            return;
+        }
         StageGate.populateEnter(chunk);
         GenMetrics.enter(GenMetrics.POPULATE);
     }

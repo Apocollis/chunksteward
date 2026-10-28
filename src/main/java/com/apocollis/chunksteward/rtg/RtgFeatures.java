@@ -89,6 +89,43 @@ public final class RtgFeatures {
         }
     }
 
+    /** Populate attempts per loaded chunk object this session; a chunk is populated once, so more than one is a loop. */
+    private static final java.util.Map<Chunk, int[]> ATTEMPTS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<Chunk, int[]>());
+    private static final java.util.concurrent.atomic.AtomicInteger REPEAT_LOGGED = new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * True when this chunk object already started an RTG populate. A chunk is populated once ({@code isTerrainPopulated}
+     * guards it); a trace showed the same few chunks populated again every tick, each time through a staged job. The
+     * repeat is blocked and the first ones are logged with the chunk's flags and the calling mod class, which is what
+     * is needed to find what keeps asking.
+     */
+    public static boolean repeatedPopulate(Chunk chunk) {
+        if (!com.apocollis.chunksteward.config.ChunkStewardConfig.features.enabled) {
+            return false;
+        }
+        int[] attempts;
+        synchronized (ATTEMPTS) {
+            attempts = ATTEMPTS.get(chunk);
+            if (attempts == null) {
+                ATTEMPTS.put(chunk, attempts = new int[1]);
+            }
+        }
+        int n = ++attempts[0];
+        if (n <= 1) {
+            return false;
+        }
+        FeatureLane.countRepeat();
+        if (REPEAT_LOGGED.incrementAndGet() <= 12) {
+            com.apocollis.chunksteward.ChunkSteward.LOGGER.warn(
+                    "staged populate: chunk {},{} asked to populate again (attempt {}); terrain {} light {} populated {} held {}; "
+                            + "blocked. Asked by {}", chunk.x, chunk.z, n, chunk.isTerrainPopulated(), chunk.isLightPopulated(),
+                    chunk.isPopulated(), FeatureLane.holds(chunk.getWorld().provider.getDimension(), chunk.x, chunk.z),
+                    FeatureLane.callerOf(new Throwable().getStackTrace()));
+        }
+        return true;
+    }
+
     /** Head of {@code LatePopulatingChunk.doPopulate}. */
     public static void enterDoPopulate() {
         IN_DO_POPULATE.set(Boolean.TRUE);

@@ -69,6 +69,10 @@ The staged tail is a copy of RTG-Plus 9.0.3. Staging runs only when the SHA-256 
 
 The status log has a `staged populate:` line each interval: queued, submitted, on worker, applied, inline by reason (tile entity, outside window, unsupported, timeout, error), not staged by reason (queue full, chunk not loaded, busy), mod generators staged / inline / demoted, average worker and wait time, and since the start of the session the mod classes behind the aborts and the worker time by generator. The Forge event bus logs an abort that passes through an event listener as an error with a stack trace; those lines are dropped (`FeatureLogFilter`), the abort is counted here.
 
+## Repeat populates
+
+A chunk object is populated once. A trace showed a few chunks populated again every tick, each time through a staged job (one chunk 100 times in 24 s; 3950 of 5439 jobs were repeats). `RtgFeatures.repeatedPopulate` blocks a second RTG populate of the same loaded chunk object, counts it (`repeat populates blocked` in the status line), and logs the first twelve with the chunk's flags and the mod class that asked, so the cause can be found.
+
 ## Not covered
 
 - RTG's decorations and the mod `IWorldGenerator`s are staged. Structure paste, lakes, dungeons, animals and ice and snow run on the server thread.

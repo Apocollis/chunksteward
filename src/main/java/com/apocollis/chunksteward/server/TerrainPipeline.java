@@ -605,8 +605,10 @@ public final class TerrainPipeline {
                     noteUnsupported(main);
                     break;
                 }
-                ChunkSteward.LOGGER.info("pipeline: worker {} biome provider {} matches the server's in dimension {}", slot,
-                        biome.getClass().getSimpleName(), dimension);
+                if (different == null) {
+                    ChunkSteward.LOGGER.info("pipeline: worker {} biome provider {} matches the server's in dimension {}", slot,
+                            biome.getClass().getSimpleName(), dimension);
+                }
                 GENERATORS.get(slot).put(dimension, copy);
                 BIOMES.get(slot).put(dimension, biome);
             }

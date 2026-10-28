@@ -34,7 +34,9 @@ public final class FeatureStats {
     /** A mod-generator segment that ran on the server thread (demoted or server-only generators, or a fallback). */
     static final int GEN_INLINE = 12;
     static final int GEN_DEMOTED = 13;
-    private static final int COUNTERS = 14;
+    /** A second populate of a chunk object that already populated, blocked. */
+    static final int REPEAT_BLOCKED = 14;
+    private static final int COUNTERS = 15;
 
     private static final AtomicLongArray INTERVAL = new AtomicLongArray(COUNTERS);
     private static final AtomicLongArray TOTAL = new AtomicLongArray(COUNTERS);
@@ -162,7 +164,8 @@ public final class FeatureStats {
                 .append(", unsupported ").append(n[INLINE_UNSUPPORTED])
                 .append(", timeout ").append(n[INLINE_TIMEOUT])
                 .append(", error ").append(n[INLINE_ERROR])
-                .append("), not staged ").append(declined)
+                .append("), repeat populates blocked ").append(n[REPEAT_BLOCKED])
+                .append(", not staged ").append(declined)
                 .append(" (queue full ").append(n[DECLINED_QUEUE])
                 .append(", chunk not loaded ").append(n[DECLINED_UNLOADED])
                 .append(", busy ").append(n[DECLINED_BUSY]).append(')');
