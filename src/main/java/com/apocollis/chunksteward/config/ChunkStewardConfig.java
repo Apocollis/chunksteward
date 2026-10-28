@@ -65,6 +65,15 @@ public class ChunkStewardConfig {
                 "hellfirepvp.astralsorcery.", "thaumcraft.", "thebetweenlands.", "ivorius.reccomplex."
         };
 
+        @Config.Comment({"EXPERIMENTAL. Compute the light of a staged chunk's 2x2 window on the terrain worker and install it as arrays,",
+                "instead of the server thread flooding it block by block (the largest cost of a populate on the server thread).",
+                "Run /chunksteward light verify first: it compares the worker's light with vanilla's on loaded chunks."})
+        public boolean lightStage = false;
+
+        @Config.Comment("Most cells just outside the window the server thread checks after installing worker light, per chunk.")
+        @Config.RangeInt(min = 0, max = 65536)
+        public int lightBoundaryChecks = 4096;
+
         @Config.Comment("Aborts or errors inside one generator class before it is demoted to the server thread for the session.")
         @Config.RangeInt(min = 1, max = 100)
         public int demoteAfterAborts = 3;

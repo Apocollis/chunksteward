@@ -64,6 +64,8 @@ The staged tail is a copy of RTG-Plus 9.0.3. Staging runs only when the SHA-256 
 | `logAborts` | true | Log why a job fell back to the server thread, once per reason and mod class. |
 | `modGenerators` | true | Run the mod `IWorldGenerator`s of staged chunks on a worker too (with `enabled`). |
 | `serverOnlyGenerators` | AstralSorcery, Thaumcraft, Betweenlands, Recurrent Complex | Generator classes (full name, or package prefix ending in a dot) that always run on the server thread. |
+| `lightStage` | false | Experimental: compute the 2x2 window's light on the worker and install it ([staged-light.md](staged-light.md)). |
+| `lightBoundaryChecks` | 4096 | Most cells outside the window checked after a worker light install. |
 | `demoteAfterAborts` | 3 | Aborts or errors in one generator class before it is demoted for the session. |
 | `extraRtgClassHashes` | empty | SHA-256 of RTG classes the staged tail may also run with. |
 

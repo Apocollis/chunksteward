@@ -35,7 +35,7 @@ import java.util.Set;
  */
 public class ChunkStewardCommand extends CommandBase {
     private static final List<String> SUBCOMMANDS = Arrays.asList("status", "chunkinfo", "queue", "holds", "log",
-            "pregen", "pipeline", "hotspots");
+            "pregen", "pipeline", "hotspots", "light");
     private static final List<String> HOTSPOT_SUBCOMMANDS = Arrays.asList("list", "here", "add", "remove", "reset");
 
     @Override
@@ -46,7 +46,7 @@ public class ChunkStewardCommand extends CommandBase {
     @Override
     public String getUsage(ICommandSender sender) {
         return "/chunksteward <status | chunkinfo [x z] | queue | holds | log <seconds> | pregen <pause|resume>"
-                + " | pipeline <status|off|on|verify <count> [dimension]> | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
+                + " | light verify [chunks] | pipeline <status|off|on|verify <count> [dimension]> | hotspots <list|here|add [x z]|remove <id>|reset <id>>>";
     }
 
     @Override
@@ -83,6 +83,9 @@ public class ChunkStewardCommand extends CommandBase {
                 break;
             case "hotspots":
                 hotspots(server, sender, args);
+                break;
+            case "light":
+                light(server, sender, args);
                 break;
             default:
                 throw new WrongUsageException(getUsage(sender));
@@ -261,6 +264,18 @@ public class ChunkStewardCommand extends CommandBase {
     }
 
     // ---- queue, holds, log, pregen ----------------------------------------------------------------------------------
+
+    private static void light(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException {
+        if (args.length < 2 || !"verify".equalsIgnoreCase(args[1])) {
+            throw new WrongUsageException("/chunksteward light verify [chunks]   (compares worker light with the light loaded chunks hold)");
+        }
+        int count = args.length >= 3 ? parseInt(args[2], 1, 60) : 6;
+        WorldServer world = worldOf(server, sender);
+        send(sender, "light verify runs on the server thread for a moment...", TextFormatting.GRAY);
+        for (String line : LightVerify.run(world, sender.getCommandSenderEntity(), count)) {
+            send(sender, line);
+        }
+    }
 
     private static String centreBiome(Chunk chunk) {
         byte[] ids = chunk.getBiomeArray();

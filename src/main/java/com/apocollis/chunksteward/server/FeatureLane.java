@@ -414,6 +414,12 @@ public final class FeatureLane {
                 replay(job, state == FeatureJob.DONE ? Integer.MAX_VALUE : job.doneWrites,
                         state == FeatureJob.DONE ? Integer.MAX_VALUE : job.doneChecks);
             }
+            for (int i = 0; i < from; i++) {
+                FeatureStage done = job.stages.get(i);
+                if (done instanceof LightStage) {
+                    ((LightStage) done).install(job);
+                }
+            }
             if (from < job.stages.size()) {
                 boolean decoLock = needsDecorationLock(job);
                 if (decoLock) {

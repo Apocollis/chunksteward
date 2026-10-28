@@ -19,7 +19,7 @@ import com.apocollis.chunksteward.server.PacingView;
  */
 public final class ChunkStewardAPI {
     /** Incremented when methods are added. Never changes the meaning of an existing method. */
-    public static final int API_VERSION = 4;
+    public static final int API_VERSION = 5;
 
     private ChunkStewardAPI() {
     }

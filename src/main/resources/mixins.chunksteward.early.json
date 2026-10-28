@@ -6,6 +6,7 @@
   "package": "com.apocollis.chunksteward.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "AccessorChunk",
     "AccessorChunkGeneratorEnd",
     "AccessorChunkGeneratorHell",
     "AccessorMapGenStructure",

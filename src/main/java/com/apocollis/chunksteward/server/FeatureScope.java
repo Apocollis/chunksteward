@@ -178,6 +178,15 @@ final class FeatureScope {
         return state.getLightOpacity(world, scratch.setPos(x, y, z));
     }
 
+    /** The final height of every column the job wrote to: {@code consumer(x, z, height)}. */
+    void forEachHeight(HeightConsumer consumer) {
+        heights.forEach((key, height) -> consumer.accept(FeatureJournal.unpackX(key), FeatureJournal.unpackZ(key), height));
+    }
+
+    interface HeightConsumer {
+        void accept(int x, int z, int height);
+    }
+
     // ---- heights ------------------------------------------------------------------------------------------
 
     /** {@code World.getHeight(x, z)}: the height map value, with the job's writes applied. */

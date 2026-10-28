@@ -36,7 +36,10 @@ public final class FeatureStats {
     static final int GEN_DEMOTED = 13;
     /** A second populate of a chunk object that already populated, blocked. */
     static final int REPEAT_BLOCKED = 14;
-    private static final int COUNTERS = 15;
+    static final int LIGHT_INSTALLED = 15;
+    static final int LIGHT_FALLBACK = 16;
+    static final int LIGHT_BOUNDARY = 17;
+    private static final int COUNTERS = 18;
 
     private static final AtomicLongArray INTERVAL = new AtomicLongArray(COUNTERS);
     private static final AtomicLongArray TOTAL = new AtomicLongArray(COUNTERS);
@@ -56,6 +59,11 @@ public final class FeatureStats {
     static void count(int id) {
         INTERVAL.incrementAndGet(id);
         TOTAL.incrementAndGet(id);
+    }
+
+    static void countMany(int id, long n) {
+        INTERVAL.addAndGet(id, n);
+        TOTAL.addAndGet(id, n);
     }
 
     static long total(int id) {
@@ -182,6 +190,10 @@ public final class FeatureStats {
                     .append(", inline ").append(n[GEN_INLINE])
                     .append(", demoted ").append(n[GEN_DEMOTED])
                     .append(" (").append(GeneratorPolicy.demotedCount()).append(" in session)");
+        }
+        if (ChunkStewardConfig.features.lightStage) {
+            out.append("; light stage installed ").append(n[LIGHT_INSTALLED]).append(", fell back ").append(n[LIGHT_FALLBACK])
+                    .append(", boundary checks ").append(n[LIGHT_BOUNDARY]);
         }
         out.append("; worker avg ").append(avgMs(workNanos, workJobs))
                 .append(" ms over ").append(workJobs)

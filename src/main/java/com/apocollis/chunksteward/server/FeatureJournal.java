@@ -120,6 +120,16 @@ final class FeatureJournal<S> {
         private boolean[] used = new boolean[64];
         private int size;
 
+        /** Calls {@code consumer} for each stored key and value, in no particular order. */
+        @SuppressWarnings("unchecked")
+        void forEach(java.util.function.BiConsumer<Long, V> consumer) {
+            for (int i = 0; i < keys.length; i++) {
+                if (used[i]) {
+                    consumer.accept(keys[i], (V) values[i]);
+                }
+            }
+        }
+
         @SuppressWarnings("unchecked")
         V get(long key) {
             int mask = keys.length - 1;

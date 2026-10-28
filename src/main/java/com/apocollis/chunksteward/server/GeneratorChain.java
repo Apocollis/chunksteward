@@ -31,6 +31,11 @@ public final class GeneratorChain {
         return eligible != null && eligible.contains(Boolean.TRUE);
     }
 
+    /** The light stage of a job: computes the 2x2 window's light on the worker (see {@code LightStage}). */
+    public static FeatureStage lightStage(WorldServer world, int x, int z) {
+        return new LightStage(world, x, z);
+    }
+
     /** A stage for the generators that may run on a worker. */
     public static FeatureStage stage(WorldServer world, int x, int z, List<Boolean> eligible, IChunkGenerator generator) {
         return new GeneratorStage(world, x, z, eligible, generator);

@@ -80,7 +80,8 @@ public final class LightEngine {
         computeBlock();
     }
 
-    private void computeSky() {
+    /** Sky light for every cell that is not fixed. */
+    public void computeSky() {
         int[] heights = new int[sx * sz];
         for (int z = 0; z < sz; z++) {
             for (int x = 0; x < sx; x++) {
@@ -111,7 +112,8 @@ public final class LightEngine {
         flood(sky, false);
     }
 
-    private void computeBlock() {
+    /** Block light for every cell that is not fixed. */
+    public void computeBlock() {
         clear();
         for (int i = 0; i < block.length; i++) {
             if (fixed[i]) {

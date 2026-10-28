@@ -174,6 +174,9 @@ public final class RtgFeatures {
                 if (GeneratorChain.anyStaged(eligible)) {
                     stages.add(GeneratorChain.stage(server, x, z, eligible, (IChunkGenerator) generator));
                 }
+                if (com.apocollis.chunksteward.config.ChunkStewardConfig.features.lightStage) {
+                    stages.add(GeneratorChain.lightStage(server, x, z));
+                }
                 Runnable finish = new Finish(generator, stage, server, x, z, eligible);
                 FeatureJob job = FeatureLane.submit(server, x, z, stages, finish);
                 if (job != null) {

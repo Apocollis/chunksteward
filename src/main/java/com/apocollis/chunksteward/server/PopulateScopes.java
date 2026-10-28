@@ -30,6 +30,16 @@ final class PopulateScopes {
         }
     }
 
+    static void lightInstalled(World world, Chunk chunk) {
+        for (PopulateScope scope : LIST) {
+            try {
+                scope.lightInstalled(world, chunk);
+            } catch (Throwable failed) {
+                ChunkSteward.LOGGER.warn("populate scope lightInstalled failed", failed);
+            }
+        }
+    }
+
     /** Ends in reverse order of {@link #begin}. */
     static void end(World world, Chunk chunk) {
         for (int i = LIST.size() - 1; i >= 0; i--) {
