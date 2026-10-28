@@ -23,7 +23,12 @@ final class PipelineStats {
     private static final AtomicLong READY_WAIT_JOBS = new AtomicLong();
     private static final AtomicLong READY_WAIT_MAX = new AtomicLong();
     private static final AtomicLong MAIN_GENERATED = new AtomicLong();
-    private static final AtomicLong IDLE_PARKS = new AtomicLong();
+    private static final AtomicLong SNAPSHOTS = new AtomicLong();
+    private static final AtomicLong SNAPSHOT_NANOS = new AtomicLong();
+    private static final AtomicLong SNAPSHOT_MISSES = new AtomicLong();
+    private static final AtomicLong BIOME_CHECKED = new AtomicLong();
+    private static final AtomicLong BIOME_MISMATCH = new AtomicLong();
+    private static final AtomicLong BIOME_MISMATCH_TOTAL = new AtomicLong();
     private static long lastReport = System.nanoTime();
     private static long lastStolen;
     private static long lastInstalled;
@@ -76,6 +81,30 @@ final class PipelineStats {
         PipelineTrace.event("install", job.dimension, job.x, job.z, "ready " + wait / 1_000_000L + "ms");
     }
 
+    /** The server thread took a biome snapshot for a queued chunk. */
+    static void snapshotTaken(long nanos) {
+        SNAPSHOTS.incrementAndGet();
+        SNAPSHOT_NANOS.addAndGet(nanos);
+    }
+
+    /** A worker asked its snapshot for a biome outside it (or a layer it does not hold). Any thread. */
+    static void snapshotMiss() {
+        SNAPSHOT_MISSES.incrementAndGet();
+    }
+
+    static void biomeChecked() {
+        BIOME_CHECKED.incrementAndGet();
+    }
+
+    /** A worker chunk's biomes disagreed with the server provider's: it was discarded. */
+    static void biomeMismatch(PipelineJob job, short[] server) {
+        BIOME_MISMATCH.incrementAndGet();
+        BIOME_MISMATCH_TOTAL.incrementAndGet();
+        BiomeCheck.report(job.dimension, job.x, job.z, job.workerSlot, job.biomeSamples, server);
+        PipelineTrace.event("biome_mismatch", job.dimension, job.x, job.z, "slot " + job.workerSlot + " points "
+                + BiomeCheck.differing(job.biomeSamples, server));
+    }
+
     /** The server thread generated a chunk itself (not claimed by a worker, or stolen back). */
     static void mainGenerated(int dimension, int x, int z, String why) {
         MAIN_GENERATED.incrementAndGet();
@@ -87,6 +116,10 @@ final class PipelineStats {
         while (value > (seen = cell.get()) && !cell.compareAndSet(seen, value)) {
             // retry
         }
+    }
+
+    private static String ms2(long nanos, long count) {
+        return count == 0 ? "-" : String.format("%.1f", nanos / 1.0e6 / count);
     }
 
     private static String ms(long nanos, long count) {
@@ -139,6 +172,12 @@ final class PipelineStats {
         lastStolen = stolen;
         lastDiscarded = discarded;
         lastFailed = failed;
+        long snapshots = SNAPSHOTS.getAndSet(0L);
+        out.append("; biome snapshots ").append(snapshots).append(" (avg ").append(ms2(SNAPSHOT_NANOS.getAndSet(0L), snapshots))
+                .append(" ms on the server thread, ").append(SNAPSHOT_MISSES.getAndSet(0L)).append(" lookups outside one)");
+        out.append("; biome check ").append(BIOME_CHECKED.getAndSet(0L)).append(" chunks, ")
+                .append(BIOME_MISMATCH.getAndSet(0L)).append(" mismatched (").append(BIOME_MISMATCH_TOTAL.get())
+                .append(" in session)");
         if (PipelineTrace.enabled()) {
             out.append("; trace on, dropped ").append(PipelineTrace.dropped());
         }

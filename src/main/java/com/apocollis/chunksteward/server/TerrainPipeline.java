@@ -522,6 +522,17 @@ public final class TerrainPipeline {
             SPECULATIVE_READY.remove(key);
             return null;
         }
+        if (job.biomeSamples != null && ChunkStewardConfig.pipeline.biomeCheck) {
+            short[] server = BiomeCheck.sample(world.getBiomeProvider(), x, z);
+            PipelineStats.biomeChecked();
+            if (BiomeCheck.firstDifference(job.biomeSamples, server) >= 0) {
+                PipelineStats.biomeMismatch(job, server);
+                CHUNKS.remove(key, chunk);
+                TABLE.discardReady(dimension, x, z);
+                SPECULATIVE_READY.remove(key);
+                return null;
+            }
+        }
         long started = System.nanoTime();
         try {
             generator.recreateStructures(chunk, x, z);
@@ -582,6 +593,20 @@ public final class TerrainPipeline {
                     noteUnsupported(main);
                     break;
                 }
+                String different = BiomeCheck.compareProviders(world.getBiomeProvider(), biome);
+                if (different != null && ChunkStewardConfig.pipeline.biomeSnapshot) {
+                    ChunkSteward.LOGGER.warn("pipeline: worker {}'s own copy of the biome provider {} differs from the server's "
+                            + "in dimension {} ({}); workers use biome snapshots from the server's provider instead",
+                            slot, biome.getClass().getName(), dimension, different);
+                } else if (different != null) {
+                    ChunkSteward.LOGGER.error("pipeline off for dimension {}: the worker's copy of the biome provider {} does "
+                            + "not give the server's biomes ({}). The generator stays on the server thread.", dimension,
+                            biome.getClass().getName(), different);
+                    noteUnsupported(main);
+                    break;
+                }
+                ChunkSteward.LOGGER.info("pipeline: worker {} biome provider {} matches the server's in dimension {}", slot,
+                        biome.getClass().getSimpleName(), dimension);
                 GENERATORS.get(slot).put(dimension, copy);
                 BIOMES.get(slot).put(dimension, biome);
             }
@@ -660,7 +685,48 @@ public final class TerrainPipeline {
         }
         TABLE.dropQueuedExcept(keep);
         snapshot = ranked.toArray(NO_JOBS);
+        takeBiomeSnapshots(snapshot);
         CURSOR.set(0);
+    }
+
+    /** True while a ranked job still waits for its biome snapshot, so idle workers look again soon. */
+    private static volatile boolean snapshotsPending;
+
+    /**
+     * Server thread. The ranked jobs in order get a {@link BiomeSnapshot} from the server's own biome provider, within
+     * {@code pipeline.biomeSnapshotMs} (at least one per tick); a worker does not start a job that has none.
+     */
+    private static void takeBiomeSnapshots(PipelineJob[] ranked) {
+        if (!ChunkStewardConfig.pipeline.biomeSnapshot) {
+            snapshotsPending = false;
+            return;
+        }
+        long deadline = System.nanoTime() + ChunkStewardConfig.pipeline.biomeSnapshotMs * 1_000_000L;
+        int radius = ChunkStewardConfig.pipeline.biomeSnapshotRadius;
+        boolean first = true;
+        boolean pending = false;
+        for (PipelineJob job : ranked) {
+            if (job.biomeSnapshot != null || job.state.get() != PipelineJob.QUEUED) {
+                continue;
+            }
+            if (!first && System.nanoTime() > deadline) {
+                pending = true;
+                break;
+            }
+            WorldServer world = DimensionManager.getWorld(job.dimension);
+            if (world == null) {
+                continue;
+            }
+            first = false;
+            long started = System.nanoTime();
+            try {
+                job.biomeSnapshot = BiomeSnapshot.take(world.getBiomeProvider(), job.x, job.z, radius);
+                PipelineStats.snapshotTaken(System.nanoTime() - started);
+            } catch (RuntimeException failed) {
+                ChunkSteward.LOGGER.warn("pipeline biome snapshot failed at {}, {} in {}", job.x, job.z, job.dimension, failed);
+            }
+        }
+        snapshotsPending = pending;
     }
 
     private static PipelineJob enqueue(int dimension, int x, int z, boolean speculative) {
@@ -805,7 +871,7 @@ public final class TerrainPipeline {
                     if (slot < cap && runFeature()) {
                         continue;
                     }
-                    LockSupport.parkNanos(FeatureLane.hasQueued() ? 1_000_000L : 50_000_000L);
+                    LockSupport.parkNanos(FeatureLane.hasQueued() || snapshotsPending ? 1_000_000L : 50_000_000L);
                     continue;
                 }
                 int index = CURSOR.getAndIncrement();
@@ -814,10 +880,14 @@ public final class TerrainPipeline {
                     if (runFeature()) {
                         continue;
                     }
-                    LockSupport.parkNanos(FeatureLane.hasQueued() ? 1_000_000L : 50_000_000L);
+                    LockSupport.parkNanos(FeatureLane.hasQueued() || snapshotsPending ? 1_000_000L : 50_000_000L);
                     continue;
                 }
                 PipelineJob job = jobs[index];
+                if (job.biomeSnapshot == null && ChunkStewardConfig.pipeline.biomeSnapshot) {
+                    // Its biomes are taken on the server thread at the start of the tick; the next ranking has them.
+                    continue;
+                }
                 if (TABLE.readyCount() >= ChunkStewardConfig.pipeline.maxReady
                         && (job.speculative || !evictOldestSpeculative())) {
                     LockSupport.parkNanos(50_000_000L);
@@ -858,7 +928,8 @@ public final class TerrainPipeline {
             long started = System.nanoTime();
             boolean ok = false;
             PipelineMarker.set(true, false);
-            PipelineMarker.biome(biome, job.dimension);
+            BiomeProvider used = job.biomeSnapshot != null ? new SnapshotBiomeProvider(job.biomeSnapshot, biome) : biome;
+            PipelineMarker.biome(used, job.dimension);
             PipelineMarker.context(job.context);
             try {
                 BedrockShim.run(world, () -> held[0] = generator.generateChunk(job.x, job.z));
@@ -868,6 +939,9 @@ public final class TerrainPipeline {
                 PipelineKey key = new PipelineKey(job.dimension, job.x, job.z);
                 CHUNKS.put(key, held[0]);
                 job.doneNanos = System.nanoTime();
+                if (ChunkStewardConfig.pipeline.biomeCheck) {
+                    job.biomeSamples = BiomeCheck.sample(used, job.x, job.z);
+                }
                 ok = true;
                 if (!TABLE.publish(job)) {
                     CHUNKS.remove(key, held[0]);

@@ -86,3 +86,11 @@ The thread ratio (CPU time over that tick's wall time) is smoothed per tick, alp
 ## Not in this build
 
 `readyTtlSeconds` does not expire a waiting result. A mismatch or a generator with no copy stays on the server thread. RTG is copied for verify. A worker or verify thread does not share `rand()`, the terrain and surface fields those calls write, or the cellular cache.
+
+## Biome snapshots
+
+A terrain worker used to generate from its own copy of the dimension's biome provider. A mod that builds the biome layout from layers with shared state (Geographicraft / Climate Control decides the biome layout and land masses; RTG-Plus shapes the terrain inside that map) can make that copy answer differently from the server's provider, and the chunk then has biomes, and terrain shaped by them, that do not match its neighbours.
+
+With `pipeline.biomeSnapshot` (default true) the server thread asks its own biome provider for the biomes around each queued chunk (`pipeline.biomeSnapshotRadius`, default 80 blocks, one entry per block; RTG-Plus reads -64 to +100 blocks around the chunk origin), within `pipeline.biomeSnapshotMs` per tick (default 3, at least one snapshot), and the worker generates from that snapshot (`SnapshotBiomeProvider`): single-block and rectangle lookups come from it, so the worker builds no biome tree of its own and cannot see a different layout. A worker does not start a job until its snapshot exists. A lookup outside the snapshot (a far structure check, the generation layer) is answered by the worker's own copy and counted: `biome snapshots N (avg X ms on the server thread, M lookups outside one)` in the `pipeline:` status line.
+
+Guardrails: after a worker generates a chunk it records what its provider (the snapshot) answers at 64 points; the server compares with its own provider when it installs the chunk, and a chunk that differs is discarded and generated on the server thread (`pipeline.biomeCheck`, default true; logged as `pipeline biome mismatch`). When a worker copy is built, it is compared with the server's provider over a 24x24 grid spread across +-6000 x +-12000 blocks; with snapshots on a difference is only logged, with `biomeSnapshot` off the generator stays on the server thread.

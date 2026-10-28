@@ -18,6 +18,10 @@ final class PipelineJob {
     final long createdNanos = System.nanoTime();
     volatile long claimedNanos;
     volatile long doneNanos;
+    /** What the worker's biome provider answered at 8x8 points of the chunk ({@link BiomeCheck}), or null. */
+    volatile short[] biomeSamples;
+    /** The server thread's biomes around the chunk, which the worker generates from, or null ({@link BiomeSnapshot}). */
+    volatile BiomeSnapshot biomeSnapshot;
     volatile int workerSlot = -1;
     /** Preload or stage 2. Player demand clears this. Evicted first when the ready map is full. */
     volatile boolean speculative;

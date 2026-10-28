@@ -443,6 +443,27 @@ public class ChunkStewardConfig {
         @Config.RangeInt(min = 0, max = 1000)
         public int stealWaitMs = 10;
 
+        @Config.Comment({"After a worker generates a chunk, compare what its biome provider answers at 64 points of the chunk with",
+                "what the server thread's provider answers when the chunk is installed. A chunk that differs is discarded and generated",
+                "on the server thread, and the mismatch is logged. Catches a mod whose biome layers give a worker copy different",
+                "results (climate or latitude mods). Costs 64 cached biome lookups per chunk on each side."})
+        public boolean biomeCheck = true;
+
+        @Config.Comment({"The server thread asks its own biome provider for the biomes around each queued chunk and the worker",
+                "generates from that, instead of asking a biome provider of its own. This is what keeps a worker on the same biome",
+                "layout as the server when a mod (Geographicraft / Climate Control) builds the layout from layers with shared state.",
+                "A worker waits for the snapshot before it starts a chunk. Costs about 2 to 4 ms of server thread per chunk."})
+        public boolean biomeSnapshot = true;
+
+        @Config.Comment("Server thread milliseconds per tick spent taking biome snapshots (at least one per tick).")
+        @Config.RangeInt(min = 1, max = 20)
+        public int biomeSnapshotMs = 3;
+
+        @Config.Comment({"Blocks around the chunk a snapshot covers. RTG-Plus reads biomes from -64 to +100 blocks around the chunk",
+                "origin; a lookup outside the snapshot is answered by the worker's own copy and counted in the status line."})
+        @Config.RangeInt(min = 16, max = 256)
+        public int biomeSnapshotRadius = 80;
+
         @Config.Comment("Seconds before a claimed job is abandoned. The worker is not interrupted mid-chunk.")
         @Config.RangeInt(min = 1, max = 300)
         public int jobTimeoutSeconds = 30;
