@@ -157,6 +157,25 @@ class LightEngineTest {
     }
 
     @Test
+    void minecraftsOpacityOf255IsAnOpaqueBlockNotOpenAir() {
+        // IBlockState.getLightOpacity answers 255 for stone; a byte cast made that -1, which read as transparent.
+        LightEngine e = new LightEngine(3, 6, 3);
+        for (int z = 0; z < 3; z++) {
+            for (int x = 0; x < 3; x++) {
+                e.setOpacity(e.index(x, 2, z), 255);
+            }
+        }
+        e.compute();
+        assertEquals(3, e.height(1, 1));
+        assertEquals(15, e.sky[e.index(1, 5, 1)]);
+        assertEquals(0, e.sky[e.index(1, 2, 1)]);
+        assertEquals(0, e.sky[e.index(1, 1, 1)]);
+        assertEquals(0, e.sky[e.index(1, 0, 1)]);
+        e.setEmission(e.index(1, 3, 1), 300);
+        assertEquals(15, e.emission[e.index(1, 3, 1)]);
+    }
+
+    @Test
     void anOpaqueNonEmittingCellStaysDark() {
         LightEngine e = new LightEngine(3, 3, 3);
         e.skyAbove = false;

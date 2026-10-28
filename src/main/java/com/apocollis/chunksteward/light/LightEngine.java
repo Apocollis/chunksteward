@@ -60,6 +60,19 @@ public final class LightEngine {
         }
     }
 
+    /**
+     * Sets a cell's opacity from what {@code IBlockState.getLightOpacity} answers. Minecraft answers 255 for an opaque
+     * block, not 15, so the value is clamped to 0..15; a byte cast would wrap 255 to -1 and read the cell as open air.
+     */
+    public void setOpacity(int cell, int raw) {
+        opacity[cell] = (byte) Math.max(0, Math.min(15, raw));
+    }
+
+    /** Sets a cell's emitted block light, clamped to 0..15. */
+    public void setEmission(int cell, int raw) {
+        emission[cell] = (byte) Math.max(0, Math.min(15, raw));
+    }
+
     public int index(int x, int y, int z) {
         return (y * sz + z) * sx + x;
     }

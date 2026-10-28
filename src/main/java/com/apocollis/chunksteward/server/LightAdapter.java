@@ -80,8 +80,8 @@ final class LightAdapter {
                     if (state == air || state.getBlock() == Blocks.AIR) {
                         continue;
                     }
-                    engine.opacity[i] = (byte) state.getLightOpacity(world, pos);
-                    engine.emission[i] = (byte) state.getLightValue(world, pos);
+                    engine.setOpacity(i, state.getLightOpacity(world, pos));
+                    engine.setEmission(i, state.getLightValue(world, pos));
                 }
             }
         }
