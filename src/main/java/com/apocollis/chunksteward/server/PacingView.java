@@ -76,4 +76,8 @@ public final class PacingView {
     public static void registerPreparer(JobPreparer preparer) {
         PipelinePreparers.register(preparer);
     }
+
+    public static void registerPopulateScope(com.apocollis.chunksteward.api.PopulateScope scope) {
+        PopulateScopes.register(scope);
+    }
 }

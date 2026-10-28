@@ -13,12 +13,13 @@ import com.apocollis.chunksteward.server.PacingView;
  * <p>The averages cover about the last 20 ticks, so they suit pacing and not exact decisions about the current tick;
  * use {@link #getRemainingTickBudgetMs(double)} for in-tick decisions. This API only grows: existing methods keep their
  * meaning, new ones are added, and {@link #API_VERSION} increases when something is added. Version 3 adds the
- * pipeline queries below. Call those from a class that is loaded only after {@code API_VERSION >= 3}, so a jar
- * that is still version 2 does not throw {@code NoSuchMethodError} while this class is linking.
+ * pipeline queries below, version 4 {@link #registerPopulateScope}. Call those from a class that is loaded only
+ * after {@code API_VERSION} reached that version, so an older jar does not throw {@code NoSuchMethodError} while
+ * this class is linking.
  */
 public final class ChunkStewardAPI {
     /** Incremented when methods are added. Never changes the meaning of an existing method. */
-    public static final int API_VERSION = 3;
+    public static final int API_VERSION = 4;
 
     private ChunkStewardAPI() {
     }
@@ -131,5 +132,13 @@ public final class ChunkStewardAPI {
     /** Registers {@code preparer} once. A second call with the same instance does nothing. (Version 3.) */
     public static void registerJobPreparer(JobPreparer preparer) {
         PacingView.registerPreparer(preparer);
+    }
+
+    /**
+     * Registers {@code scope} once; a second call with the same instance does nothing. Chunk Steward calls it around
+     * populate work it finishes after the populate call returned (staged populate). (Version 4.)
+     */
+    public static void registerPopulateScope(PopulateScope scope) {
+        PacingView.registerPopulateScope(scope);
     }
 }

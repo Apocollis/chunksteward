@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.mixin;
 
+import com.apocollis.chunksteward.server.FeatureLane;
 import com.apocollis.chunksteward.server.GenMetrics;
 import com.apocollis.chunksteward.server.RandomTickGuard;
 import com.apocollis.chunksteward.server.StageGate;
@@ -8,6 +9,7 @@ import net.minecraft.world.gen.ChunkProviderServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
@@ -49,5 +51,14 @@ public abstract class MixinChunkProviderServer {
             shift = At.Shift.AFTER))
     private void chunksteward$terrainEnd(int x, int z, CallbackInfoReturnable<Chunk> cir) {
         GenMetrics.exit(GenMetrics.TERRAIN);
+    }
+
+    /** A chunk with staged populate work that is not applied yet stays loaded. */
+    @Inject(method = "queueUnload(Lnet/minecraft/world/chunk/Chunk;)V", at = @At("HEAD"), cancellable = true)
+    private void chunksteward$featureHoldUnload(Chunk chunk, CallbackInfo ci) {
+        if (FeatureLane.queued() != 0
+                && FeatureLane.holds(((ChunkProviderServer) (Object) this).world.provider.getDimension(), chunk.x, chunk.z)) {
+            ci.cancel();
+        }
     }
 }

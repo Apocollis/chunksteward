@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.mixin;
 
+import com.apocollis.chunksteward.server.FeatureLane;
 import com.apocollis.chunksteward.server.TickMonitor;
 import net.minecraft.server.MinecraftServer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,6 +23,12 @@ public abstract class MixinMinecraftServer {
     @Inject(method = "tick()V", at = @At("RETURN"))
     private void chunksteward$tickEnd(CallbackInfo ci) {
         TickMonitor.onTickEnd();
+    }
+
+    /** Staged populate: finish every job before the worlds are saved and unloaded. */
+    @Inject(method = "stopServer()V", at = @At("HEAD"))
+    private void chunksteward$stop(CallbackInfo ci) {
+        FeatureLane.drainAll();
     }
 
     @Inject(method = "saveAllWorlds(Z)V", at = @At("HEAD"))

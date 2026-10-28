@@ -75,6 +75,14 @@ Roguelike can use `isChunkReady` before it forces a footprint chunk: true means 
 
 Tweaks uses `isPipelineContext` around any stash of the live generator, and `registerJobPreparer` when a worker job needs a snapshot that must not be read from shared maps. The object from `prepare` is what `currentJobContext()` returns on the worker. It must not hold the live world.
 
+## Version 4 (staged populate)
+
+| Method | Who calls it | What it means |
+| --- | --- | --- |
+| `registerPopulateScope(PopulateScope)` | server thread, once, at mod init | `begin(world, chunk)` and `end(world, chunk)` bracket the work Chunk Steward finishes after a populate call returned (staged populate, [staged-populate.md](staged-populate.md)): the recorded block writes, the rest of the populate, the mod world generators. The chunk is already marked terrain populated. A mod that recorded or deferred work inside the populate call opens its scope again for that part. A second call with the same instance does nothing. |
+
+A class that calls a version 4 method must be loaded only after `API_VERSION >= 4`.
+
 ## Related, no API needed
 
 Mods that load chunks across ticks, force them with a Forge chunk ticket and then call `chunk.populate` themselves (Roguelike Dungeons) are covered by `populate.ticketExemptMods` in the config (see [populate.md](populate.md)).

@@ -168,6 +168,13 @@ public final class StageGate {
                 || !Dimensions.applies(dim)) {
             return ret("pass: disabled, client, other thread or excluded dimension", true);
         }
+        if (FeatureLane.conflicts(dim, chunk.x, chunk.z)) {
+            // A staged populate nearby has not been applied yet: this chunk's window overlaps its window, so it waits
+            // for it, which is the order an unstaged populate would have used.
+            PopulateQueue.enqueue(dim, key);
+            statPopulateDeferred++;
+            return ret("staged populate nearby", false);
+        }
         if (!member && populateDepth == 0 && (PopulateQueue.isDraining() || stage2Active)) {
             return ret("pass: queue drain or stage 2", true);
         }

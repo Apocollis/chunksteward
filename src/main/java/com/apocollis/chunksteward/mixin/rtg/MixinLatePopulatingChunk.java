@@ -1,13 +1,17 @@
 package com.apocollis.chunksteward.mixin.rtg;
 
+import com.apocollis.chunksteward.rtg.RtgFeatures;
 import com.apocollis.chunksteward.server.GenMetrics;
 import com.apocollis.chunksteward.server.StageGate;
+import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.gen.IChunkGenerator;
+import net.minecraftforge.fml.common.registry.GameRegistry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
@@ -75,5 +79,33 @@ public abstract class MixinLatePopulatingChunk {
                     shift = At.Shift.AFTER, remap = true), remap = false)
     private static void chunksteward$generatorPopulateEnd(Chunk chunk, IChunkGenerator generator, CallbackInfo ci) {
         GenMetrics.exit(GenMetrics.GEN_POPULATE);
+    }
+
+    // ---- staged populate (see RtgFeatures) -----------------------------------------------------------------------
+
+    @Inject(method = "doPopulate(Lnet/minecraft/world/chunk/Chunk;Lnet/minecraft/world/gen/IChunkGenerator;)V",
+            at = @At("HEAD"), remap = false)
+    private static void chunksteward$stageBegin(Chunk chunk, IChunkGenerator generator, CallbackInfo ci) {
+        RtgFeatures.enterDoPopulate();
+    }
+
+    @Inject(method = "doPopulate(Lnet/minecraft/world/chunk/Chunk;Lnet/minecraft/world/gen/IChunkGenerator;)V",
+            at = @At("RETURN"), remap = false)
+    private static void chunksteward$stageEnd(Chunk chunk, IChunkGenerator generator, CallbackInfo ci) {
+        RtgFeatures.exitDoPopulate();
+    }
+
+    /** The mod generators run after the staged decorations are applied, from the job's finish. */
+    @Redirect(method = "doPopulate(Lnet/minecraft/world/chunk/Chunk;Lnet/minecraft/world/gen/IChunkGenerator;)V",
+            at = @At(value = "INVOKE", remap = false,
+                    target = "Lnet/minecraftforge/fml/common/registry/GameRegistry;generateWorld(IILnet/minecraft/world/World;"
+                            + "Lnet/minecraft/world/gen/IChunkGenerator;Lnet/minecraft/world/chunk/IChunkProvider;)V"),
+            remap = false)
+    private static void chunksteward$generateWorld(int chunkX, int chunkZ, World world, IChunkGenerator generator,
+                                                   IChunkProvider provider) {
+        if (RtgFeatures.staged()) {
+            return;
+        }
+        GameRegistry.generateWorld(chunkX, chunkZ, world, generator, provider);
     }
 }

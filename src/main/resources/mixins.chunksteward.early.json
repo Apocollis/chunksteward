@@ -11,7 +11,9 @@
     "AccessorMapGenStructure",
     "AccessorPlayerChunkMap",
     "AccessorPlayerChunkMapEntry",
+    "MixinAnvilChunkLoaderFeatureHold",
     "MixinChunk",
+    "MixinChunkFeatureHold",
     "MixinChunkGeneratorEnd",
     "MixinChunkGeneratorHell",
     "MixinChunkProviderServer",
@@ -22,6 +24,7 @@
     "MixinMinecraftServer",
     "MixinPlayerChunkMap",
     "MixinPlayerChunkMapEntry",
+    "MixinWorldFeature",
     "MixinWorldPipeline",
     "MixinWorldProviderPipeline",
     "MixinWorldServer"

@@ -81,6 +81,44 @@ public final class TerrainPipeline {
         return run && !killed && !loliBlocked && GUARD.cap() > 0;
     }
 
+    /**
+     * Staged populate may use the workers for this world: the pipeline runs, the worker cap is above 0, the world is
+     * served and its generator has a copy on every worker.
+     */
+    static boolean featuresAvailable(WorldServer world) {
+        if (world == null || !isPipelineActive() || !serving(world)) {
+            return false;
+        }
+        int dimension = world.provider.getDimension();
+        int count = Math.min(GUARD.cap(), GENERATORS.size());
+        if (count <= 0) {
+            return false;
+        }
+        for (int slot = 0; slot < count; slot++) {
+            if (!GENERATORS.get(slot).containsKey(dimension)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The generator copy worker {@code slot} runs for {@code dimension}, or null. */
+    static IChunkGenerator workerGenerator(int slot, int dimension) {
+        return slot >= 0 && slot < GENERATORS.size() ? GENERATORS.get(slot).get(dimension) : null;
+    }
+
+    /** The biome provider copy worker {@code slot} uses for {@code dimension}, or null. */
+    static BiomeProvider workerBiome(int slot, int dimension) {
+        return slot >= 0 && slot < BIOMES.size() ? BIOMES.get(slot).get(dimension) : null;
+    }
+
+    /** Wakes parked workers, so a staged job does not wait for the next poll. */
+    static void wakeWorkers() {
+        for (Thread thread : threads) {
+            LockSupport.unpark(thread);
+        }
+    }
+
     static int queueSize() {
         return TABLE.count(PipelineJob.QUEUED)
                 + TABLE.count(PipelineJob.CLAIMED_WORKER)
@@ -161,6 +199,7 @@ public final class TerrainPipeline {
     }
 
     public static void onDimensionUnloaded(int dimension) {
+        FeatureLane.drain(dimension);
         synchronized (LOCK) {
             TABLE.bumpEpoch(dimension);
             dropChunks(dimension);
@@ -746,12 +785,19 @@ public final class TerrainPipeline {
                 PipelineJob[] jobs = snapshot;
                 int cap = GUARD.cap();
                 if (slot >= cap || jobs.length == 0) {
-                    LockSupport.parkNanos(50_000_000L);
+                    if (slot < cap && runFeature()) {
+                        continue;
+                    }
+                    LockSupport.parkNanos(FeatureLane.hasQueued() ? 1_000_000L : 50_000_000L);
                     continue;
                 }
                 int index = CURSOR.getAndIncrement();
                 if (index < 0 || index >= jobs.length) {
-                    LockSupport.parkNanos(50_000_000L);
+                    // Every ranked terrain job is claimed: staged populate may use this worker.
+                    if (runFeature()) {
+                        continue;
+                    }
+                    LockSupport.parkNanos(FeatureLane.hasQueued() ? 1_000_000L : 50_000_000L);
                     continue;
                 }
                 PipelineJob job = jobs[index];
@@ -767,6 +813,16 @@ public final class TerrainPipeline {
                 job.workerSlot = slot;
                 generate(job);
             }
+        }
+
+        /** Runs one staged populate job when one is waiting. */
+        private boolean runFeature() {
+            FeatureJob job = FeatureLane.takeForWorker();
+            if (job == null) {
+                return false;
+            }
+            FeatureLane.execute(job, slot);
+            return true;
         }
 
         private void generate(PipelineJob job) {

@@ -8,6 +8,7 @@
   "mixins": [
     "MixinLatePopulatingChunk",
     "MixinChunkGeneratorRTG",
+    "MixinChunkGeneratorRTGSplit",
     "MixinRTGWorld",
     "MixinRealisticBiomeBase",
     "MixinTraverseStep",

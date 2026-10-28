@@ -74,9 +74,11 @@ public final class TickMonitor {
         externalGenThisTick = 0;
         ChunkThrottle.onTickStart();
         TerrainPipeline.onTickStart();
+        FeatureLane.onTickStart();
     }
 
     public static void onTickEnd() {
+        FeatureLane.onTickEnd();
         TerrainPipeline.onTickEnd();
         long now = System.nanoTime();
         EXTERNAL_RING[tick & 255] = externalGenThisTick;

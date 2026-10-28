@@ -209,6 +209,9 @@ final class PopulateQueue {
                 long key = list.getLong(i);
                 int x = (int) key;
                 int z = (int) (key >> 32);
+                if (world != null && FeatureLane.conflicts(e.getKey(), x, z)) {
+                    continue; // waits for a staged populate nearby; picking it again would only requeue it
+                }
                 double score = world == null ? -1.0 : score(world, x, z);
                 if (!found || score < bestScore) {
                     found = true;

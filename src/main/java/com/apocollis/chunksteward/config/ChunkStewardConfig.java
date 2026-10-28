@@ -18,6 +18,39 @@ public class ChunkStewardConfig {
     public static Dimensions dimensions = new Dimensions();
     public static Logging logging = new Logging();
     public static Pipeline pipeline = new Pipeline();
+    public static Features features = new Features();
+
+    /**
+     * Staged populate: work that normally runs inside {@code Chunk.populate} (RTG's decorations first) is recorded on a
+     * terrain worker and applied on the server thread afterwards. Needs the terrain pipeline running.
+     */
+    public static class Features {
+        @Config.Comment({"Run RTG's decorations (trees, plants, ores of the realistic biomes) on a terrain worker. The worker",
+                "records what it would place and the server thread applies it later, so the chunk is not sent until it is",
+                "done. Needs pipeline.enabled and RTG-Plus listed in pipeline.allowedGenerators. Off by default."})
+        public boolean enabled = false;
+
+        @Config.Comment("Chunks waiting for their staged work. Past this a populate runs inline instead of waiting.")
+        @Config.RangeInt(min = 1, max = 64)
+        public int maxQueued = 8;
+
+        @Config.Comment("Milliseconds per tick the server thread spends applying finished staged work (at least one chunk per tick).")
+        @Config.RangeInt(min = 1, max = 50)
+        public int promoteMs = 6;
+
+        @Config.Comment({"Seconds a chunk may wait for its staged work before the server thread does it inline. Also the",
+                "limit for a job that stays on a worker."})
+        @Config.RangeInt(min = 1, max = 300)
+        public int maxWaitSeconds = 10;
+
+        @Config.Comment("Log the reason each time staged work aborts and falls back to the server thread (first 20 per session).")
+        public boolean logAborts = true;
+
+        @Config.Comment({"SHA-256 of rtg/world/gen/ChunkGeneratorRTG.class and rtg/world/gen/LatePopulatingChunk.class from an RTG-Plus",
+                "build staged populate may also run with (lowercase hex, one per line, either class). The staged tail is a copy of",
+                "RTG-Plus 9.0.3's populate code, so only that build is accepted by default. Adding a hash accepts a build you checked."})
+        public String[] extraRtgClassHashes = new String[0];
+    }
 
     public static class Throttle {
         @Config.Comment("Master switch for the adaptive chunk throttle.")

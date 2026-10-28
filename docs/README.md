@@ -23,6 +23,7 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 | Stage gate: populate suppression, light deferral | [stage-gate.md](stage-gate.md) |
 | Status log metrics | [metrics.md](metrics.md) |
 | Terrain pipeline | [pipeline.md](pipeline.md) |
+| Staged populate (RTG decorations on a worker) | [staged-populate.md](staged-populate.md) |
 | Temporary diagnostics (`dbg` lines) | [diagnostics.md](diagnostics.md) |
 | Build / deploy | [build-and-release.md](build-and-release.md) |
 | Smoke tests | [verification.md](verification.md) |
