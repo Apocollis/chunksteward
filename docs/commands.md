@@ -7,7 +7,7 @@
 | Command | Shows |
 | --- | --- |
 | `status` | version, which features are on, tick average, populate queue size, held chunks, chunks waiting for players, stage 2 hotspots and total pregenerated against the warning and limit, what stage 2 is doing now and its last hold-off reason, and the pipeline line (idle unless a generator class is listed) |
-| `chunkinfo [x z]` | for the chunk you stand in, or the given chunk coordinates: loaded, terrain-populated, light-populated, on disk, queued for populate, terrain-only preload chunk, held by Chunk Steward (ticks left), watched by a player, Forge tickets and their owner mods. The quick answer to "does this chunk have a hole?" |
+| `chunkinfo [x z]` | for the chunk you stand in, or the given chunk coordinates: loaded, terrain-populated, light-populated, on disk, queued for populate, terrain-only preload chunk, held by Chunk Steward (ticks left), watched by a player, the centre biome, which path generated the terrain this session (terrain worker or server thread), Forge tickets and their owner mods. The quick answer to "does this chunk have a hole?" |
 | `queue` | populate queue size and the first 10 entries |
 | `holds` | held chunks (preload, cascades, stage 2) and when the oldest hold ends |
 

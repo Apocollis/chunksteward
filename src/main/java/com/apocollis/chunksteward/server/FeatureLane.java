@@ -210,11 +210,17 @@ public final class FeatureLane {
             long started = System.nanoTime();
             try {
                 scope.begin();
+                int finished = 0;
                 for (FeatureStage stage : job.stages) {
                     stage.run(generator);
                     if (scope.abortReason() != null) {
                         break;
                     }
+                    // A later stage that aborts leaves these stages' writes valid: the server applies them and runs
+                    // only the stages after them inline.
+                    job.doneWrites = scope.journal.size();
+                    job.doneChecks = scope.journal.checkCount();
+                    job.doneStages = ++finished;
                 }
                 failure = scope.abortReason();
             } catch (FeatureAbort abort) {
@@ -359,40 +365,45 @@ public final class FeatureLane {
     /** Applies one finished job: the recorded writes (or the stages inline), then the rest of the chunk's populate. */
     private static void apply(FeatureJob job) {
         Chunk center = job.center();
-        boolean fallBack = job.state.get() != FeatureJob.DONE;
+        int state = job.state.get();
+        boolean fallBack = state != FeatureJob.DONE;
+        // A job the worker finished (failed) keeps the stages that completed; an abandoned job may still be running.
+        int from = state == FeatureJob.DONE ? job.stages.size()
+                : (state == FeatureJob.FAILED && job.scope != null ? job.doneStages : 0);
         FeatureStats.waited(System.nanoTime() - job.createdNanos);
         if (job.workNanos > 0L) {
             FeatureStats.work(job.workNanos);
         }
         if (fallBack) {
             noteAbort(job);
-        } else {
-            for (FeatureStage stage : job.stages) {
-                if (stage instanceof GeneratorStage) {
-                    FeatureStats.count(FeatureStats.GEN_STAGED);
-                }
+        }
+        for (int i = 0; i < from; i++) {
+            if (job.stages.get(i) instanceof GeneratorStage) {
+                FeatureStats.count(FeatureStats.GEN_STAGED);
             }
         }
         boolean previousFalling = BlockFalling.fallInstantly;
         BlockFalling.fallInstantly = true;
         PopulateScopes.begin(job.world, center);
         try {
-            if (fallBack) {
+            if (from > 0) {
+                replay(job, state == FeatureJob.DONE ? Integer.MAX_VALUE : job.doneWrites,
+                        state == FeatureJob.DONE ? Integer.MAX_VALUE : job.doneChecks);
+            }
+            if (from < job.stages.size()) {
                 boolean decoLock = needsDecorationLock(job);
                 if (decoLock) {
                     DECO.lock();
                 }
                 try {
-                    for (FeatureStage stage : job.stages) {
-                        stage.runInline();
+                    for (int i = from; i < job.stages.size(); i++) {
+                        job.stages.get(i).runInline();
                     }
                 } finally {
                     if (decoLock) {
                         DECO.unlock();
                     }
                 }
-            } else {
-                replay(job);
             }
             job.finish.run();
             FeatureStats.count(FeatureStats.APPLIED);
@@ -405,13 +416,18 @@ public final class FeatureLane {
         }
     }
 
-    private static void replay(FeatureJob job) {
+    /** Replays the first {@code writes} writes and {@code checks} light checks the worker recorded. */
+    private static void replay(FeatureJob job, int writes, int checks) {
         FeatureJournal<net.minecraft.block.state.IBlockState> journal = job.scope.journal;
         WorldServer world = job.world;
+        int count = 0;
         for (FeatureJournal.Write<net.minecraft.block.state.IBlockState> write : journal.writes()) {
+            if (count++ >= writes) {
+                break;
+            }
             world.setBlockState(BlockPos.fromLong(write.pos), write.state, write.flags);
         }
-        for (long pos : journal.checks()) {
+        for (long pos : journal.checks(checks)) {
             world.checkLight(BlockPos.fromLong(pos));
         }
     }

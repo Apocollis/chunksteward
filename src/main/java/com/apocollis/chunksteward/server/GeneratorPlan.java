@@ -14,15 +14,21 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Tells Forge's {@code GameRegistry.generateWorld} loop (see {@code MixinGameRegistry}) which generators to run on this
  * thread. The loop is Forge's own, so the order and the per-generator random seeding stay exactly Forge's; a plan only
- * filters it. Three kinds:
+ * filters it. Two kinds:
  * <ul>
  * <li>probe: runs nothing, records which generators are eligible for a worker, in loop order;</li>
- * <li>worker or inline run of one segment: runs only the generators in that run of equal eligibility.</li>
+ * <li>run of one segment, on a worker or inline: {@link #STAGED_RUN} runs the eligible generators, {@link #SERVER_RUN}
+ * the others. Each keeps Forge's relative order.</li>
  * </ul>
  * The eligibility list is a snapshot taken by the probe, so a generator demoted while a chunk is in progress does not
- * move the run boundaries.
+ * change which run it belongs to.
  */
 public final class GeneratorPlan {
+    /** The generators that may run on a worker. */
+    static final int STAGED_RUN = 0;
+    /** The generators that stay on the server thread (server-only or demoted). */
+    static final int SERVER_RUN = 1;
+
     private static final ThreadLocal<GeneratorPlan> CURRENT = new ThreadLocal<GeneratorPlan>();
     private static final ThreadLocal<Class<?>> RUNNING = new ThreadLocal<Class<?>>();
 
@@ -101,9 +107,9 @@ public final class GeneratorPlan {
             return;
         }
         boolean inRange = at < plan.eligible.size();
-        // A generator registered after the probe has no run of its own: the server thread runs it with the last run.
-        boolean mine = inRange ? GeneratorSegments.runOf(plan.eligible, at) == plan.segment
-                : !plan.worker && plan.segment == GeneratorSegments.runs(plan.eligible).size() - 1;
+        // A generator registered after the probe was not listed: the server thread runs it with the server run.
+        boolean mine = inRange ? plan.eligible.get(at).booleanValue() == (plan.segment == STAGED_RUN)
+                : !plan.worker && plan.segment == SERVER_RUN;
         if (!mine) {
             return;
         }

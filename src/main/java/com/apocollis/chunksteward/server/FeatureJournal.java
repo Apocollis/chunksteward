@@ -93,6 +93,15 @@ final class FeatureJournal<S> {
         return Arrays.copyOf(checks, checkCount);
     }
 
+    /** The first {@code limit} light checks (those asked before a stage boundary). */
+    long[] checks(int limit) {
+        return Arrays.copyOf(checks, Math.min(limit, checkCount));
+    }
+
+    int checkCount() {
+        return checkCount;
+    }
+
     int size() {
         return writes.size();
     }

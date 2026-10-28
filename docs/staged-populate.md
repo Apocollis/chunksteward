@@ -13,16 +13,16 @@ For one chunk (cx, cz), in the order an unstaged populate uses:
 
 ## Mod generators
 
-With `features.modGenerators` (default true) the mod `IWorldGenerator`s of a staged chunk run in runs through Forge's own `GameRegistry.generateWorld` loop, which a per-thread plan filters (`GeneratorPlan`, `MixinGameRegistry`). Forge's order and each generator's per-chunk seed are unchanged.
+With `features.modGenerators` (default true) the mod `IWorldGenerator`s of a staged chunk run in the same job as the decorations. They go through Forge's own `GameRegistry.generateWorld` loop, which a per-thread plan filters (`GeneratorPlan`, `MixinGameRegistry`), so each generator keeps Forge's per-chunk seed and the generators keep their relative order.
 
-- A first pass over the loop, which runs nothing, lists which generators may go to a worker: all of them, except classes in `features.serverOnlyGenerators` and classes demoted this session.
-- Consecutive generators with the same answer form a run. A run for a worker is a feature job with its own scope (same rules as the decorations: 4x4 read window, 2x2 write window, journal, abort on tile entities and the other calls above); the job's finish starts the next run. A run for the server thread runs inline between jobs. The chunk stays held until the last run is applied. If a job cannot be queued the run is done inline.
+- When the decorations are submitted, a first pass over the loop, which runs nothing, lists which generators may go to a worker: all of them, except classes in `features.serverOnlyGenerators` and classes demoted this session.
+- The job has two stages: the decorations, then the eligible generators, in one scope (the generators see the decorations' blocks). One worker pass and one apply per chunk.
+- At apply the server thread replays the journal, runs the rest of RTG's populate (animals, ice and snow, the post-populate event, the light fix), then the generators that stay on the server thread (server-only or demoted), then `markDirty`. **Order differs from an unstaged populate in two ways:** the eligible mod generators run before the animals and the ice and snow pass (they do not see snow layers; snow is laid over what they placed), and the server-only generators run after the eligible ones instead of interleaved with them.
+- If the generator stage aborts, the decorations' writes are kept and applied, and only the generator stage runs inline (with the same per-chunk seeds). If the decorations abort, both run inline.
 - A generator that aborts a job or throws on a worker gets a strike (`features.demoteAfterAborts`, default 3); at that count the class runs on the server thread for the rest of the session. The status line counts demotions and the log names the class once.
 - Each generator class has a lock: a worker run and a server-thread run of the same class never overlap (the server thread waits for the end of that one generator call). Other threads that touch a generator's static state are not covered; list such a generator in `serverOnlyGenerators`.
 - Also answered from the job's window, or aborting it: `ChunkProviderServer.getLoadedChunk`/`loadChunk`/`provideChunk`, and aborting: entity list queries (`getEntitiesWithinAABB` and the excluding variants), `getVillageCollection`, `getMapStorage`, `getPerWorldStorage`.
 - Default server-only list: AstralSorcery, Thaumcraft, The Betweenlands, Recurrent Complex (generators that keep global state, save world data or place tile entities and entities).
-
-The tail in step 4 is RTG-Plus 9.0.3's `populate` code after `rDecorate`, copied unchanged (`MixinChunkGeneratorRTGSplit`), because `populate` cannot be resumed mid-method.
 
 ## What the worker sees (`FeatureScope`)
 
@@ -67,12 +67,12 @@ The staged tail is a copy of RTG-Plus 9.0.3. Staging runs only when the SHA-256 
 | `demoteAfterAborts` | 3 | Aborts or errors in one generator class before it is demoted for the session. |
 | `extraRtgClassHashes` | empty | SHA-256 of RTG classes the staged tail may also run with. |
 
-The status log has a `staged populate:` line each interval: queued, submitted, on worker, applied, inline by reason (tile entity, outside window, unsupported, timeout, error), not staged by reason (queue full, chunk not loaded, busy), mod generators staged / inline / demoted, average worker and wait time, and since the start of the session the mod classes behind the aborts and the worker time by generator. A job counts as submitted once per run, so a chunk with mod generators submits two or more. The Forge event bus logs an abort that passes through an event listener as an error with a stack trace; those lines are dropped (`FeatureLogFilter`), the abort is counted here.
+The status log has a `staged populate:` line each interval: queued, submitted, on worker, applied, inline by reason (tile entity, outside window, unsupported, timeout, error), not staged by reason (queue full, chunk not loaded, busy), mod generators staged / inline / demoted, average worker and wait time, and since the start of the session the mod classes behind the aborts and the worker time by generator. The Forge event bus logs an abort that passes through an event listener as an error with a stack trace; those lines are dropped (`FeatureLogFilter`), the abort is counted here.
 
 ## Not covered
 
 - RTG's decorations and the mod `IWorldGenerator`s are staged. Structure paste, lakes, dungeons, animals and ice and snow run on the server thread.
 - A decoration that does something the list above aborts on is run inline every time; mod generators are demoted after repeated aborts (above), decorations are not.
 - A populate that runs outside the queue (for example a mod that calls `Chunk.populate` itself) can still be staged, but a populate that is declined (queue full, chunk not loaded) runs everything inline.
-- A job that aborts after some generators ran on the worker runs the whole run again inline from Forge's seed. The worker's writes were only journaled, so the world is the same, but a generator that changes something else (static state, saved data) on a worker does it twice. List such a generator in `serverOnlyGenerators`.
+- A job whose generator stage aborts after some generators ran on the worker runs the whole stage again inline from Forge's seeds. The worker's writes were only journaled, so the world is the same, but a generator that changes something else (static state, saved data) on a worker does it twice. List such a generator in `serverOnlyGenerators`.
 - Reads of a loaded chunk that another server activity changes during a job (liquid flow in an already-sent neighbour, for one) are not locked; a torn read fails the job and it runs inline.

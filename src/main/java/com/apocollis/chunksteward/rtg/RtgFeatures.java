@@ -2,6 +2,7 @@ package com.apocollis.chunksteward.rtg;
 
 import com.apocollis.chunksteward.server.FeatureJob;
 import com.apocollis.chunksteward.server.FeatureLane;
+import com.apocollis.chunksteward.server.FeatureStage;
 import com.apocollis.chunksteward.server.GeneratorChain;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
@@ -11,7 +12,8 @@ import net.minecraft.util.math.ChunkPos;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 /**
@@ -115,8 +117,15 @@ public final class RtgFeatures {
                 RtgDecorationStage stage = new RtgDecorationStage(generator, biome, chunkPos, river, hasVillage, rand);
                 int x = chunkPos.x;
                 int z = chunkPos.z;
-                Runnable finish = new Finish(generator, stage, server, x, z);
-                FeatureJob job = FeatureLane.submit(server, x, z, Collections.singletonList(stage), finish);
+                // One job for the decorations and the mod generators that may leave the server thread.
+                List<FeatureStage> stages = new ArrayList<FeatureStage>(2);
+                stages.add(stage);
+                List<Boolean> eligible = GeneratorChain.probe(server, x, z, (IChunkGenerator) generator);
+                if (GeneratorChain.anyStaged(eligible)) {
+                    stages.add(GeneratorChain.stage(server, x, z, eligible, (IChunkGenerator) generator));
+                }
+                Runnable finish = new Finish(generator, stage, server, x, z, eligible);
+                FeatureJob job = FeatureLane.submit(server, x, z, stages, finish);
                 if (job != null) {
                     STAGED.set(job);
                     return;
@@ -141,8 +150,11 @@ public final class RtgFeatures {
         private final WorldServer world;
         private final int x;
         private final int z;
+        private final List<Boolean> eligible;
 
-        Finish(RtgSplitAccess generator, RtgDecorationStage stage, WorldServer world, int x, int z) {
+        Finish(RtgSplitAccess generator, RtgDecorationStage stage, WorldServer world, int x, int z,
+               List<Boolean> eligible) {
+            this.eligible = eligible;
             this.generator = generator;
             this.stage = stage;
             this.world = world;
@@ -154,16 +166,12 @@ public final class RtgFeatures {
         public void run() {
             stage.beforeTail();
             generator.chunksteward$tail(stage.biome(), x, z, stage.hasVillage());
-            // The mod generators: staged runs and server-thread runs in Forge's order; markDirty after the last one.
-            GeneratorChain.run(world, x, z, (IChunkGenerator) generator, new Runnable() {
-                @Override
-                public void run() {
-                    Chunk chunk = world.getChunkProvider().getLoadedChunk(x, z);
-                    if (chunk != null) {
-                        chunk.markDirty();
-                    }
-                }
-            });
+            // The generators that stay on the server thread; the others ran with the decorations.
+            GeneratorChain.finish(world, x, z, (IChunkGenerator) generator, eligible);
+            Chunk chunk = world.getChunkProvider().getLoadedChunk(x, z);
+            if (chunk != null) {
+                chunk.markDirty();
+            }
         }
     }
 }

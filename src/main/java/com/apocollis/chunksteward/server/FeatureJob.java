@@ -33,6 +33,10 @@ public final class FeatureJob {
     volatile FeatureScope scope;
     volatile String failure;
     volatile String culprit;
+    /** Stages that finished on the worker, and the journal sizes right after the last of them (see FeatureLane). */
+    volatile int doneStages;
+    volatile int doneWrites;
+    volatile int doneChecks;
     volatile long workNanos;
 
     FeatureJob(WorldServer world, int x, int z, long seq, Chunk[] window, List<FeatureStage> stages,

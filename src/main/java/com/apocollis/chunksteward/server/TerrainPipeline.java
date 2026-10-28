@@ -443,8 +443,10 @@ public final class TerrainPipeline {
         PipelineKey key = new PipelineKey(dimension, x, z);
         Chunk installed = install(world, generator, dimension, x, z, key);
         if (installed != null) {
+            GenSource.record(dimension, x, z, GenSource.WORKER);
             return installed;
         }
+        GenSource.record(dimension, x, z, GenSource.SERVER);
         PipelineJob job = TABLE.jobAt(dimension, x, z);
         if (job != null && job.state.get() == PipelineJob.CLAIMED_WORKER) {
             long deadline = System.nanoTime() + ChunkStewardConfig.pipeline.stealWaitMs * 1_000_000L;
@@ -453,6 +455,7 @@ public final class TerrainPipeline {
             }
             installed = install(world, generator, dimension, x, z, key);
             if (installed != null) {
+                GenSource.record(dimension, x, z, GenSource.WORKER);
                 return installed;
             }
             TABLE.steal(job);

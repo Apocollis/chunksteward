@@ -4,69 +4,47 @@ import net.minecraft.world.WorldServer;
 import net.minecraft.world.gen.IChunkGenerator;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
- * Runs the mod world generators of a chunk whose decorations were staged, in Forge's order. Generators that may go to
- * a worker are grouped into runs; each run is a feature job of its own, and the runs that must stay on the server
- * thread (server-only or demoted generators) run in between, inline. Each job's finish starts the next run, so the chunk
- * stays held until the last one is applied. Server thread only.
+ * Mod world generators of a chunk whose decorations are staged (see {@link GeneratorPlan}). The generators that may go to
+ * a worker are a stage of the same job as the decorations; this is the other side: the probe, and the generators that
+ * stay on the server thread (server-only or demoted), run inline after the rest of the populate. Server thread only.
  */
 public final class GeneratorChain {
-    private final WorldServer world;
-    private final int x;
-    private final int z;
-    private final IChunkGenerator generator;
-    private final List<Boolean> eligible;
-    private final List<Boolean> runs;
-    private final Runnable done;
-
-    private GeneratorChain(WorldServer world, int x, int z, IChunkGenerator generator, List<Boolean> eligible,
-                           Runnable done) {
-        this.world = world;
-        this.x = x;
-        this.z = z;
-        this.generator = generator;
-        this.eligible = eligible;
-        this.runs = GeneratorSegments.runs(eligible);
-        this.done = done;
+    private GeneratorChain() {
     }
 
-    /** Runs every generator for the chunk, then {@code done}. Staged where allowed, inline otherwise. */
-    public static void run(WorldServer world, int x, int z, IChunkGenerator generator, Runnable done) {
-        if (GeneratorPolicy.enabled() && FeatureLane.available(world)) {
-            List<Boolean> eligible = GeneratorPlan.probe(x, z, world, generator);
-            if (eligible.contains(Boolean.TRUE)) {
-                new GeneratorChain(world, x, z, generator, eligible, done).step(0);
-                return;
-            }
+    /**
+     * The eligibility of each generator in Forge's order, as {@link GeneratorPlan#probe} lists it, or null when mod
+     * generators are not staged. The caller adds a {@link GeneratorStage} to the job when the list holds a true.
+     */
+    public static List<Boolean> probe(WorldServer world, int x, int z, IChunkGenerator generator) {
+        if (!GeneratorPolicy.enabled()) {
+            return null;
         }
-        GameRegistry.generateWorld(x, z, world, generator, world.getChunkProvider());
-        done.run();
+        return GeneratorPlan.probe(x, z, world, generator);
     }
 
-    private void step(int from) {
-        int run = from;
-        while (run < runs.size()) {
-            if (runs.get(run).booleanValue()) {
-                final int next = run + 1;
-                GeneratorStage stage = new GeneratorStage(world, x, z, eligible, run, generator);
-                FeatureJob job = FeatureLane.submit(world, x, z, Collections.<FeatureStage>singletonList(stage),
-                        new Runnable() {
-                            @Override
-                            public void run() {
-                                step(next);
-                            }
-                        });
-                if (job != null) {
-                    return;
-                }
-                FeatureStats.count(FeatureStats.GEN_INLINE);
-            }
-            GeneratorPlan.runSegment(eligible, run, false, x, z, world, generator);
-            run++;
+    /** True when the list has a generator that may run on a worker. */
+    public static boolean anyStaged(List<Boolean> eligible) {
+        return eligible != null && eligible.contains(Boolean.TRUE);
+    }
+
+    /** A stage for the generators that may run on a worker. */
+    public static FeatureStage stage(WorldServer world, int x, int z, List<Boolean> eligible, IChunkGenerator generator) {
+        return new GeneratorStage(world, x, z, eligible, generator);
+    }
+
+    /**
+     * Runs what the job did not: with no probe, every generator; with one, the generators that stay on the server
+     * thread (all of them when none was staged).
+     */
+    public static void finish(WorldServer world, int x, int z, IChunkGenerator generator, List<Boolean> eligible) {
+        if (eligible == null) {
+            GameRegistry.generateWorld(x, z, world, generator, world.getChunkProvider());
+        } else if (eligible.contains(Boolean.FALSE)) {
+            GeneratorPlan.runSegment(eligible, GeneratorPlan.SERVER_RUN, false, x, z, world, generator);
         }
-        done.run();
     }
 }
