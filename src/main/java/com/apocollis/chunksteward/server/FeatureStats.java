@@ -142,7 +142,7 @@ public final class FeatureStats {
     }
 
     /**
-     * The first stack frame outside Minecraft, Forge, Chunk Steward and the JDK: the mod code that made the call the
+     * The first stack frame outside Minecraft, Forge, Chunk Wizard and the JDK: the mod code that made the call the
      * worker could not allow. Null when every frame is one of those.
      */
     static String culpritOf(StackTraceElement[] stack) {

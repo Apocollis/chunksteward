@@ -382,7 +382,7 @@ public final class Stage2Pregen {
             return;
         }
         warned = true;
-        String message = "Chunk Steward stage 2 has pregenerated " + totalPregenerated() + " chunks (warning level "
+        String message = "Chunk Wizard stage 2 has pregenerated " + totalPregenerated() + " chunks (warning level "
                 + warn + ", about " + (totalPregenerated() * 94 / 10240) + " MB at 9.4 KB each). "
                 + "Set stage2.maxTotalChunks to limit it, or stage2.enabled = false to stop.";
         ChunkSteward.LOGGER.warn(message);

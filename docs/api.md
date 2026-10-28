@@ -1,6 +1,6 @@
 # Pacing API
 
-`com.apocollis.chunksteward.api.ChunkStewardAPI`: read-only pacing information for mods that spread their own work across ticks (dungeon builders, structure pasters, anything that can run in slices). Chunk Steward already measures the tick for its own throttle; the API lets other mods use the same numbers instead of each computing idle deltas.
+`com.apocollis.chunksteward.api.ChunkStewardAPI`: read-only pacing information for mods that spread their own work across ticks (dungeon builders, structure pasters, anything that can run in slices). Chunk Wizard already measures the tick for its own throttle; the API lets other mods use the same numbers instead of each computing idle deltas.
 
 | Method | Returns |
 | --- | --- |
@@ -23,7 +23,7 @@ Call it on the server thread. The averages lag by about 20 ticks: use them for p
 
 ## Using it from another mod
 
-Compile against the Chunk Steward jar (add `ChunkSteward-<version>.jar` to the compile classpath, for example `modCompileOnly` from `libs/`). Never call the API unguarded: keep the calls in a small holder class that is only loaded when Chunk Steward is present, so a missing mod costs nothing and cannot throw `NoClassDefFoundError`.
+Compile against the Chunk Wizard jar (add `ChunkSteward-<version>.jar` to the compile classpath, for example `modCompileOnly` from `libs/`). Never call the API unguarded: keep the calls in a small holder class that is only loaded when Chunk Wizard is present, so a missing mod costs nothing and cannot throw `NoClassDefFoundError`.
 
 ```java
 public final class StewardPacing {
@@ -31,7 +31,7 @@ public final class StewardPacing {
 
     private StewardPacing() {}
 
-    /** ms this tick can still spend, within {@code targetMs}; {@code targetMs} when Chunk Steward is absent. */
+    /** ms this tick can still spend, within {@code targetMs}; {@code targetMs} when Chunk Wizard is absent. */
     public static double remainingMs(double targetMs) {
         return PRESENT ? Api.remaining(targetMs) : targetMs;
     }
@@ -79,7 +79,7 @@ Tweaks uses `isPipelineContext` around any stash of the live generator, and `reg
 
 | Method | Who calls it | What it means |
 | --- | --- | --- |
-| `registerPopulateScope(PopulateScope)` | server thread, once, at mod init | `begin(world, chunk)` and `end(world, chunk)` bracket the work Chunk Steward finishes after a populate call returned (staged populate, [staged-populate.md](staged-populate.md)): the recorded block writes, the rest of the populate, the mod world generators. The chunk is already marked terrain populated. A mod that recorded or deferred work inside the populate call opens its scope again for that part. A second call with the same instance does nothing. |
+| `registerPopulateScope(PopulateScope)` | server thread, once, at mod init | `begin(world, chunk)` and `end(world, chunk)` bracket the work Chunk Wizard finishes after a populate call returned (staged populate, [staged-populate.md](staged-populate.md)): the recorded block writes, the rest of the populate, the mod world generators. The chunk is already marked terrain populated. A mod that recorded or deferred work inside the populate call opens its scope again for that part. A second call with the same instance does nothing. |
 
 A class that calls a version 4 method must be loaded only after `API_VERSION >= 4`.
 

@@ -1,12 +1,12 @@
 # Notice
 
-## Chunk Steward
+## Chunk Wizard
 
-Chunk Steward (modid `chunksteward`, formerly Lazy Chunks) is a server-side performance mod for Minecraft 1.12.2 on CleanroomMC.
+Chunk Wizard (modid `chunksteward`, formerly Lazy Chunks) is a server-side performance mod for Minecraft 1.12.2 on CleanroomMC.
 
 ## Licence
 
-Chunk Steward's code is released under the MIT licence, see [LICENSE](LICENSE). The logo is not covered by it: it is third-party artwork (credited below) and stays with its original artist.
+Chunk Wizard's code is released under the MIT licence, see [LICENSE](LICENSE). The logo is not covered by it: it is third-party artwork (credited below) and stays with its original artist.
 
 ## Credits
 
@@ -15,4 +15,4 @@ Chunk Steward's code is released under the MIT licence, see [LICENSE](LICENSE). 
 
 ## Minecraft
 
-Minecraft is (c) Mojang Studios. Chunk Steward is not an official Minecraft product and is not approved by or associated with Mojang or Microsoft.
+Minecraft is (c) Mojang Studios. Chunk Wizard is not an official Minecraft product and is not approved by or associated with Mojang or Microsoft.

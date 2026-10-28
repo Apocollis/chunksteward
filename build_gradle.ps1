@@ -1,4 +1,4 @@
-# Chunk Steward Gradle build + deploy script
+# Chunk Wizard Gradle build + deploy script
 $ErrorActionPreference = "Stop"
 $scriptDir = (Split-Path -Parent $MyInvocation.MyCommand.Path).Replace("\", "/")
 

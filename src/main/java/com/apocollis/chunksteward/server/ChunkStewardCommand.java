@@ -142,7 +142,7 @@ public class ChunkStewardCommand extends CommandBase {
     // ---- status ---------------------------------------------------------------------------------------------------
 
     private static void status(ICommandSender sender) {
-        send(sender, "Chunk Steward " + ChunkSteward.VERSION, TextFormatting.GOLD);
+        send(sender, "Chunk Wizard " + ChunkSteward.VERSION, TextFormatting.GOLD);
         send(sender, "features: throttle " + onOff(ChunkStewardConfig.throttle.enabled) + ", populate budget "
                 + onOff(ChunkStewardConfig.populate.enabled) + ", random-tick guard "
                 + onOff(ChunkStewardConfig.randomTicks.guardEnabled) + ", preload "
@@ -249,7 +249,7 @@ public class ChunkStewardCommand extends CommandBase {
         send(sender, "queued for populate: " + yesNo(PopulateQueue.contains(dim, ChunkPos.asLong(cx, cz)))
                 + "   terrain-only preload chunk: " + yesNo(StageGate.isTerrainOnly(dim, cx, cz)));
         int hold = ChunkHolds.holdRemaining(dim, cx, cz);
-        send(sender, "held by Chunk Steward: " + (hold < 0 ? "no" : "yes, " + hold + " more ticks")
+        send(sender, "held by Chunk Wizard: " + (hold < 0 ? "no" : "yes, " + hold + " more ticks")
                 + "   watched by a player: " + yesNo(world.getPlayerChunkMap().contains(cx, cz)));
         Set<ForgeChunkManager.Ticket> tickets = ForgeChunkManager.getPersistentChunksFor(world)
                 .get(new ChunkPos(cx, cz));
