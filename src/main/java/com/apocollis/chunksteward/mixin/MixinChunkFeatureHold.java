@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value = Chunk.class, priority = 500)
 public abstract class MixinChunkFeatureHold implements com.apocollis.chunksteward.server.ChunkChanges {
 
-    /** Block changes to this chunk since it loaded; the light audit compares it before and after a worker's pass. */
+    /** Light-relevant block changes to this chunk since it loaded; the light audit compares it before and after a worker's pass. */
     @org.spongepowered.asm.mixin.Unique
     private volatile int chunksteward$changes;
 
@@ -33,7 +33,17 @@ public abstract class MixinChunkFeatureHold implements com.apocollis.chunkstewar
     private void chunksteward$featureDirectWrite(BlockPos pos, IBlockState state,
                                                  CallbackInfoReturnable<IBlockState> cir) {
         FeatureHooks.chunkWrite();
-        chunksteward$changes++;
+    }
+
+    /** Counts only a write that changes what light sees (opacity or emission); crops and fluids do not. */
+    @Inject(method = "setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)"
+            + "Lnet/minecraft/block/state/IBlockState;", at = @At("RETURN"))
+    private void chunksteward$lightWrite(BlockPos pos, IBlockState state, CallbackInfoReturnable<IBlockState> cir) {
+        IBlockState old = cir.getReturnValue();
+        if (old != null && old != state
+                && (old.getLightOpacity() != state.getLightOpacity() || old.getLightValue() != state.getLightValue())) {
+            chunksteward$changes++;
+        }
     }
 
     @Inject(method = "isPopulated()Z", at = @At("HEAD"), cancellable = true)
