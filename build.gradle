@@ -127,6 +127,17 @@ tasks.register('verifyReleaseJar') {
             if (!refmapText.contains("MixinLatePopulatingChunk") || !refmapText.contains("func_185931_b")) {
                 throw new GradleException("refmap has no entry for the RTG doPopulate generator invoke (func_185931_b)")
             }
+            // An @Accessor on a vanilla field the refmap does not map (a name that is not the MCP name) fails at game
+            // start with "No candidates were found". Every such accessor must have a refmap entry.
+            fileTree("src/main/java/com/apocollis/chunksteward/mixin").matching { include "Accessor*.java" }.each { f ->
+                def m = f.text =~ /@Accessor\("(\w+)"\)/
+                m.each { match ->
+                    if (!refmapText.contains("\"" + match[1] + "\"")) {
+                        throw new GradleException("${f.name}: @Accessor(\"${match[1]}\") has no refmap entry; use the MCP " +
+                                "field name, or remap = false for a Forge-added field")
+                    }
+                }
+            }
             zip.entries().each { e ->
                 if (!e.name.endsWith(".class")) {
                     return
