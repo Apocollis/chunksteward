@@ -690,7 +690,8 @@ public final class TerrainPipeline {
         for (PipelineJob job : TABLE.readyJobs()) {
             PipelineKey key = new PipelineKey(job.dimension, job.x, job.z);
             WorldServer world = DimensionManager.getWorld(job.dimension);
-            boolean loaded = world != null && world.getChunkProvider().getLoadedChunk(job.x, job.z) != null;
+            // peek, not getLoadedChunk: that clears unloadQueued and would cancel a pending unload of the chunk.
+            boolean loaded = world != null && StageGate.peek(world.getChunkProvider(), job.x, job.z) != null;
             long idleLimit = job.speculative ? 120_000_000_000L : 15_000_000_000L;
             boolean stale = loaded || (!wanted.contains(key) && job.doneNanos != 0L && now - job.doneNanos > idleLimit);
             if (stale && job.state.get() == PipelineJob.DONE) {
