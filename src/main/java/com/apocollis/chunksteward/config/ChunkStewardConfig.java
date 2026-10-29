@@ -356,9 +356,20 @@ public class ChunkStewardConfig {
         @Config.RangeInt(min = 2, max = 96)
         public int radiusTerrain = 30;
 
-        @Config.Comment("Accumulated time (in a 3x3 block of cells) that turns a place into a hotspot, in minutes.")
-        @Config.RangeInt(min = 1, max = 1440)
-        public int dwellMinutes = 10;
+        @Config.Comment({"Accumulated time (in a 3x3 block of cells) that turns a place into a hotspot, in seconds. Staying in place",
+                "counts in full; moving slowly through counts for trafficCreditPercent of the time."})
+        @Config.RangeInt(min = 10, max = 86400)
+        public int dwellSeconds = 180;
+
+        @Config.Comment({"A player who is not standing still but moves at or below trafficMaxSpeed credits the cell they are in with",
+                "this percent of each sample, so a busy work area or a place walked back and forth builds up too. 0 = only",
+                "staying in place counts."})
+        @Config.RangeInt(min = 0, max = 100)
+        public int trafficCreditPercent = 50;
+
+        @Config.Comment("Blocks per tick at or below which moving still counts as traffic. Sprinting is about 0.28, a boat 0.4.")
+        @Config.RangeDouble(min = 0.0, max = 5.0)
+        public double trafficMaxSpeed = 0.6;
 
         @Config.Comment({"Dwell is sampled every this many seconds. A player within dwellAnchorRadiusBlocks of their anchor",
                 "is idle and credits the sample to their cell; farther away the anchor moves to where they are."})
@@ -380,17 +391,23 @@ public class ChunkStewardConfig {
         @Config.Comment("A player's bed or respawn point becomes a hotspot at once.")
         public boolean homeFromBed = true;
 
-        @Config.Comment("A hotspot is worked on only while a player is within this many chunks of it.")
-        @Config.RangeInt(min = 1, max = 64)
-        public int activeRadiusChunks = 8;
+        @Config.Comment({"A hotspot is worked on only while a player in its dimension is within this many chunks of it.",
+                "0 = at any distance: pregen runs whenever the server has room."})
+        @Config.RangeInt(min = 0, max = 4096)
+        public int maxHotspotDistanceChunks = 0;
 
-        @Config.Comment("At most one operation (a generation or a populate) every this many ticks.")
-        @Config.RangeInt(min = 1, max = 200)
-        public int intervalTicks = 4;
+        @Config.Comment({"Wait for the player's own preload queue (stage 1) to finish before working on a hotspot. Off: the",
+                "player's chunks, then preload, then stage 2 take the pipeline's room in that order, so stage 2 starts at once."})
+        public boolean requirePlayerPreload = false;
+
+        @Config.Comment({"At most this many operations (a generation or a populate) per tick, while the tick stays under maxTickMs.",
+                "The terrain phase only queues work for the terrain workers and installs what they finished."})
+        @Config.RangeInt(min = 1, max = 32)
+        public int opsPerTick = 2;
 
         @Config.Comment("At most this many operations per hotspot per minute.")
-        @Config.RangeInt(min = 1, max = 6000)
-        public int maxPerMinute = 240;
+        @Config.RangeInt(min = 1, max = 60000)
+        public int maxOpsPerMinute = 1200;
 
         @Config.Comment("Runs only when the average tick and the current tick are both under this many ms.")
         @Config.RangeDouble(min = 1.0, max = 50.0)

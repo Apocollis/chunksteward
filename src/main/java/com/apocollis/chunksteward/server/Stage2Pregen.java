@@ -38,7 +38,7 @@ import java.util.Map;
  * deferral: stage 2 has already checked there is room.</li>
  * </ol>
  * Progress is the last completed ring of each phase, saved in {@link HotspotData}; a ring cut short is redone, and
- * chunks that already exist or are populated only cost a load. One operation at most every {@code intervalTicks}.
+ * chunks that already exist or are populated only cost a load. At most {@code opsPerTick} operations per tick.
  */
 @Mod.EventBusSubscriber
 public final class Stage2Pregen {
@@ -88,7 +88,7 @@ public final class Stage2Pregen {
             return;
         }
         ChunkStewardConfig.Stage2 cfg = ChunkStewardConfig.stage2;
-        if (!cfg.enabled || Pregen.paused || TickMonitor.tick % cfg.intervalTicks != 0) {
+        if (!cfg.enabled || Pregen.paused) {
             return;
         }
         MinecraftServer server = FMLCommonHandler.instance().getMinecraftServerInstance();
@@ -96,44 +96,51 @@ public final class Stage2Pregen {
             return;
         }
         List<EntityPlayerMP> players = server.getPlayerList().getPlayers();
-        for (int i = 0; i < players.size(); i++) {
+        int done = 0;
+        for (int i = 0; i < players.size() && done < cfg.opsPerTick; i++) {
             EntityPlayerMP player = players.get((rotate + i) % players.size());
             if (!eligible(player)) {
                 continue;
             }
             WorldServer world = player.getServerWorld();
             HotspotData data = HotspotData.get(world);
-            HotspotData.Hotspot hotspot = nearestActive(data, player, cfg);
-            if (hotspot == null) {
-                continue;
-            }
-            String reason = Pregen.holdOffReason(cfg.maxTickMs);
-            if (reason == null && cfg.maxTotalChunks > 0 && totalPregenerated() >= cfg.maxTotalChunks) {
-                reason = "total limit";
-            }
-            if (reason != null) {
-                lastYield = reason;
-                statYielded++;
-                return;
-            }
-            activeDim = world.provider.getDimension();
-            activeId = hotspot.id;
-            if (work(world, data, hotspot, cfg)) {
+            // One player's hotspot can take every operation of the tick; the next tick starts with the next player.
+            while (done < cfg.opsPerTick) {
+                HotspotData.Hotspot hotspot = nearestActive(data, player, cfg);
+                if (hotspot == null) {
+                    break;
+                }
+                String reason = Pregen.holdOffReason(cfg.maxTickMs);
+                if (reason == null && cfg.maxTotalChunks > 0 && totalPregenerated() >= cfg.maxTotalChunks) {
+                    reason = "total limit";
+                }
+                if (reason != null) {
+                    lastYield = reason;
+                    statYielded++;
+                    return;
+                }
+                activeDim = world.provider.getDimension();
+                activeId = hotspot.id;
+                if (!work(world, data, hotspot, cfg)) {
+                    break;
+                }
+                done++;
                 rotate = (rotate + i + 1) % players.size();
-                return;
             }
         }
-        activeId = -1;
-        activeWhat = "-";
+        if (done == 0) {
+            activeId = -1;
+            activeWhat = "-";
+        }
     }
 
     private static boolean eligible(EntityPlayerMP player) {
         return !player.isSpectator() && Dimensions.applies(player.dimension) && !TerrainPipeline.isPaused(player.dimension)
-                && IdlePreload.stage1Done(player)
+                && (!ChunkStewardConfig.stage2.requirePlayerPreload || IdlePreload.stage1Done(player))
                 && PlayerMotion.speed(player) <= ChunkStewardConfig.preload.movingMaxSpeed;
     }
 
-    /** The unfinished hotspot nearest the player and within {@code activeRadiusChunks}, or null. */
+    /** The unfinished hotspot nearest the player and within {@code maxHotspotDistanceChunks}, or null. */
     private static HotspotData.Hotspot nearestActive(HotspotData data, EntityPlayerMP player,
                                                      ChunkStewardConfig.Stage2 cfg) {
         int cx = ((int) Math.floor(player.posX)) >> 4;
@@ -142,7 +149,7 @@ public final class Stage2Pregen {
         int bestDist = Integer.MAX_VALUE;
         for (HotspotData.Hotspot h : data.hotspots) {
             int dist = Math.max(Math.abs(h.x - cx), Math.abs(h.z - cz));
-            if (dist <= cfg.activeRadiusChunks && dist < bestDist && !isDone(h)) {
+            if ((cfg.maxHotspotDistanceChunks == 0 || dist <= cfg.maxHotspotDistanceChunks) && dist < bestDist && !isDone(h)) {
                 best = h;
                 bestDist = dist;
             }
@@ -196,7 +203,7 @@ public final class Stage2Pregen {
             w.windowStart = TickMonitor.tick;
             w.windowCount = 0;
         }
-        if (w.windowCount >= cfg.maxPerMinute) {
+        if (w.windowCount >= cfg.maxOpsPerMinute) {
             lastYield = "minute limit";
             statYielded++;
             return false;

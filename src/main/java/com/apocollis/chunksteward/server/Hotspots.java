@@ -27,7 +27,7 @@ import java.util.UUID;
  * {@code dwellAnchorRadiusBlocks} (horizontal) the player is idle and the sample is credited to their cell; farther
  * away the sample earns nothing and the anchor moves to where they are. Keeping the anchor fixed while they stay
  * near it means a slow mover (sneaking, a slow ride) leaves range after a couple of samples and cannot build dwell by
- * drifting. When the credited cell's 3x3 block reaches {@code dwellMinutes}, a hotspot is created at the
+ * drifting. When the credited cell's 3x3 block reaches {@code dwellSeconds}, a hotspot is created at the
  * dwell-weighted centroid, unless one already exists within {@code mergeRadiusChunks}.
  *
  * <p>Bed: a player's bed or respawn point in their dimension is a hotspot at once (checked at login and every minute).
@@ -97,8 +97,13 @@ public final class Hotspots {
             double dx = player.posX - s.anchorX;
             double dz = player.posZ - s.anchorZ;
             if (dx * dx + dz * dz <= radiusSq) {
-                sampleIdle(player, cfg);
+                sampleIdle(player, cfg, cfg.dwellSampleSeconds);
             } else {
+                // Not standing still: slow movement through a busy area still earns a share of the sample.
+                int traffic = cfg.dwellSampleSeconds * cfg.trafficCreditPercent / 100;
+                if (traffic > 0 && PlayerMotion.speed(player) <= cfg.trafficMaxSpeed) {
+                    sampleIdle(player, cfg, traffic);
+                }
                 reanchor(s, player);
             }
         }
@@ -116,7 +121,7 @@ public final class Hotspots {
         s.ticks = 0;
     }
 
-    private static void sampleIdle(EntityPlayerMP player, ChunkStewardConfig.Stage2 cfg) {
+    private static void sampleIdle(EntityPlayerMP player, ChunkStewardConfig.Stage2 cfg, int seconds) {
         WorldServer world = player.getServerWorld();
         HotspotData data = HotspotData.get(world);
         int cx = ((int) Math.floor(player.posX)) >> 4;
@@ -124,8 +129,8 @@ public final class Hotspots {
         int cell = cfg.cellSizeChunks;
         int cellX = Math.floorDiv(cx, cell);
         int cellZ = Math.floorDiv(cz, cell);
-        data.credit(cellX, cellZ, cfg.dwellSampleSeconds);
-        if (data.sum3x3(cellX, cellZ) < cfg.dwellMinutes * 60) {
+        data.credit(cellX, cellZ, seconds);
+        if (data.sum3x3(cellX, cellZ) < cfg.dwellSeconds) {
             return;
         }
         // Dwell-weighted centroid of the 3x3 block, in chunk coordinates.

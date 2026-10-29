@@ -456,10 +456,9 @@ public class ChunkStewardCommand extends CommandBase {
         int cz = ((int) Math.floor(entity.posZ)) >> 4;
         int cellX = Math.floorDiv(cx, cfg.cellSizeChunks);
         int cellZ = Math.floorDiv(cz, cfg.cellSizeChunks);
-        int need = cfg.dwellMinutes * 60;
-        send(sender, String.format("this cell %d s, surrounding 3x3 cells %d of %d s (%.1f of %d min)",
-                data.cell(cellX, cellZ), data.sum3x3(cellX, cellZ), need, data.sum3x3(cellX, cellZ) / 60.0,
-                cfg.dwellMinutes), TextFormatting.GOLD);
+        int need = cfg.dwellSeconds;
+        send(sender, String.format("this cell %d s, surrounding 3x3 cells %d of %d s",
+                data.cell(cellX, cellZ), data.sum3x3(cellX, cellZ), need), TextFormatting.GOLD);
         HotspotData.Hotspot near = data.near(cx, cz, cfg.mergeRadiusChunks);
         send(sender, near == null ? "no hotspot within " + cfg.mergeRadiusChunks + " chunks" : "hotspot #" + near.id
                 + " is within " + cfg.mergeRadiusChunks + " chunks");

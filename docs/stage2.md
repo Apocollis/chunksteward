@@ -1,6 +1,6 @@
 # Stage 2: home-area pregen
 
-Areas where players spend time (a bed, or a place they stay for about `dwellMinutes` in total) become **hotspots**. While a player is near a hotspot and the server has room, stage 2 generates the area terrain-only out to `radiusTerrain` (30), then populates it out to `radiusFull` (20). It is on by default (`stage2.enabled`).
+Areas where players spend time (a bed, or a place they stay or work in for about `dwellSeconds` (180) in total) become **hotspots**. While the server has room, stage 2 generates the area terrain-only out to `radiusTerrain` (30), then populates it out to `radiusFull` (20). It is on by default (`stage2.enabled`).
 
 Note: a pregenerated area keeps the worldgen settings of the moment. Worldgen config changes (RTG, villages, ore) only affect chunks generated after them. Turn stage 2 off, or remove hotspots, on worlds where you test worldgen.
 
@@ -14,7 +14,7 @@ The anchor is deliberately fixed while the player stays near it. If it followed 
 
 **Cells.** The world is divided into cells of `cellSizeChunks` (8 chunks = 128 blocks). Each cell has an accumulated-seconds counter per dimension, shared by all players (one credit per cell per sample, however many are present). The counters live in `HotspotData` and are saved with the world; they are cumulative, so they resume after a player leaves and returns, or the server restarts. At most 4096 cells are kept; past that the lowest quarter is dropped.
 
-**Qualifying.** When a cell is credited, the sum over the 3x3 cells around it is compared with `dwellMinutes * 60` s (10 min). A base that spans several cells still qualifies. At or above it, a hotspot is created at the dwell-weighted centroid of those cells, unless one already exists within `mergeRadiusChunks` (8).
+**Qualifying.** When a cell is credited, the sum over the 3x3 cells around it is compared with `dwellSeconds` (180 s). A player standing still credits the whole sample; one moving slowly (at or below `trafficMaxSpeed`, 0.6 blocks per tick) credits `trafficCreditPercent` (50) of it, so a busy work area or a place walked back and forth also qualifies. A base that spans several cells still qualifies. At or above it, a hotspot is created at the dwell-weighted centroid of those cells, unless one already exists within `mergeRadiusChunks` (8).
 
 **Beds.** A player's bed or respawn point in their dimension (`EntityPlayer.getBedLocation(dim)`) is a hotspot at once, checked at login and every minute, merged if close to an existing hotspot. `homeFromBed`.
 
@@ -23,14 +23,14 @@ There is no limit on the number of hotspots: a finished hotspot costs nothing mo
 ## Doing the work (`Stage2Pregen`)
 
 A hotspot is worked on only when all of these hold:
-- a player is within `activeRadiusChunks` (8) of it and is not a spectator;
-- that player's preload queue (stage 1) has been built and emptied (`IdlePreload.stage1Done`);
+- a player in its dimension is within `maxHotspotDistanceChunks` of it (0, the default, = any distance) and is not a spectator;
+- with `requirePlayerPreload` on (off by default), that player's preload queue (stage 1) has been built and emptied (`IdlePreload.stage1Done`). Off, the pipeline's own order (player chunks, then preload, then stage 2) keeps stage 2 behind the player;
 - the player is not fast (the moving-tier speed limit, `preload.movingMaxSpeed`);
 - `Pregen.holdOffReason(stage2.maxTickMs)` is empty: no chunks waiting for players, no recent busy generation (`preload.busyChunks`), no populate backlog (`preload.maxPopulateBacklog`), no save due, tick average and current tick under `maxTickMs` (30);
 - `/chunksteward pregen pause` is not active and `maxTotalChunks` is not reached.
 - A pipeline verify is not running in the player's dimension ([pipeline.md](pipeline.md)).
 
-At most one operation every `intervalTicks` (4) and `maxPerMinute` (240) per hotspot.
+At most `opsPerTick` (2) operations per tick and `maxOpsPerMinute` (1200) per hotspot. The terrain phase only queues work for the terrain workers and installs what they finished, so it costs the server thread little.
 
 Work goes in square rings out from the hotspot's center chunk:
 1. **Terrain phase**, rings 0..radiusTerrain: each chunk that is not loaded, not known (`GeneratedCache`) and not on disk is generated terrain-only (`StageGate.beginTerrainOnly`: populate deferred) and released at once. This makes the outer neighbours that every later populate needs exist on disk. When `pipeline.speculative` is on and the dimension is being served, that generate is queued behind player chunks. The ring keeps the chunk at its head until a finished result can be installed, and this interval does not advance the ring.
@@ -46,6 +46,6 @@ Stage 2's own terrain generation is not counted as "external generation" for the
 
 ## Config (`stage2`)
 
-`enabled` (true), `radiusFull` (20), `radiusTerrain` (30), `dwellMinutes` (10), `dwellSampleSeconds` (10), `dwellAnchorRadiusBlocks` (32), `cellSizeChunks` (8), `mergeRadiusChunks` (8), `homeFromBed` (true), `activeRadiusChunks` (8), `intervalTicks` (4), `maxPerMinute` (240), `maxTickMs` (30), `warnTotalChunks` (100000), `maxTotalChunks` (0).
+`enabled` (true), `radiusFull` (20), `radiusTerrain` (30), `dwellSeconds` (180), `trafficCreditPercent` (50), `trafficMaxSpeed` (0.6), `dwellSampleSeconds` (10), `dwellAnchorRadiusBlocks` (32), `cellSizeChunks` (8), `mergeRadiusChunks` (8), `homeFromBed` (true), `maxHotspotDistanceChunks` (0), `requirePlayerPreload` (false), `opsPerTick` (2), `maxOpsPerMinute` (1200), `maxTickMs` (30), `warnTotalChunks` (100000), `maxTotalChunks` (0).
 
 Disk: about 9.4 KB per chunk measured on a test world, so about 35 MB for a full 61x61 hotspot. Natural villages and Roguelike dungeons inside the area are generated while the hotspot is worked (their jobs run under their own budgets).
