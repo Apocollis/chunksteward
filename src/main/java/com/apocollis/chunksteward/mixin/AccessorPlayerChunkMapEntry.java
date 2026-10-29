@@ -10,4 +10,13 @@ public interface AccessorPlayerChunkMapEntry {
 
     @Accessor(value = "loading", remap = false)
     boolean chunksteward$loading();
+
+    @Accessor("changeMask")
+    int chunksteward$changeMask();
+
+    @Accessor("changeMask")
+    void chunksteward$changeMask(int mask);
+
+    @Accessor("changes")
+    void chunksteward$changes(int changes);
 }

@@ -2,6 +2,7 @@ package com.apocollis.chunksteward.server;
 
 import com.apocollis.chunksteward.ChunkSteward;
 import com.apocollis.chunksteward.config.ChunkStewardConfig;
+import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMapEntry;
 import com.apocollis.chunksteward.mixin.ChunkChanges;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.Entity;
@@ -191,28 +192,21 @@ final class LightAudit {
     /**
      * The server sends light only inside chunk data. A chunk a player already has gets its changed sections again by
      * marking 64 blocks of each changed section as changed, which makes {@code PlayerChunkMapEntry} send those sections'
-     * data (a plain block-change packet carries no light). Sections below Y 0 are not resent.
+     * data (a plain block-change packet carries no light). The mask is set by storage index, so sections below Y 0 are
+     * resent too.
      */
     private static void resend(WorldServer world, Chunk chunk, int sectionMask) {
         PlayerChunkMapEntry entry = world.getPlayerChunkMap().getEntry(chunk.x, chunk.z);
         if (entry == null || !entry.isSentToPlayers()) {
             return;
         }
-        ExtendedBlockStorage[] storages = chunk.getBlockStorageArray();
-        for (int s = 0; s < storages.length; s++) {
-            if ((sectionMask & (1 << s)) == 0 || storages[s] == Chunk.NULL_BLOCK_STORAGE) {
-                continue;
-            }
-            int base = storages[s].getYLocation();
-            if (base < 0) {
-                continue;
-            }
-            for (int x = 0; x < 16; x++) {
-                for (int z = 0; z < 4; z++) {
-                    entry.blockChanged(x, base, z);
-                }
-            }
-        }
+        // blockChanged registers the entry for its next update; the mask and count are then set directly, because a
+        // block position maps to a section bit by Y, and the bits of the packet are storage array indexes (a Depths
+        // world has sections below Y 0).
+        entry.blockChanged(0, 0, 0);
+        AccessorPlayerChunkMapEntry access = (AccessorPlayerChunkMapEntry) entry;
+        access.chunksteward$changeMask(access.chunksteward$changeMask() | sectionMask);
+        access.chunksteward$changes(64);
     }
 
     static List<String> describe() {

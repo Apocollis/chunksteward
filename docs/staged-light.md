@@ -49,4 +49,4 @@ The same engine can audit chunks that are already loaded. `light verify` showed 
 - The server thread picks stride-2 2x2 windows around you and hands each to a terrain worker when it is idle (audits run behind generation work). The worker reads the window's blocks, computes sky and block light with the engine and returns the arrays.
 - At tick end (3 ms budget) the server installs a result only if none of the window's chunks was replaced, held by a staged job, or had a block change since the audit began (`ChunkChanges` counts direct block writes per chunk). Otherwise the result is dropped and counted as "changed".
 - An install uses the same code as the light stage, queues boundary `checkLight`s, and resends the changed sections: the client only receives light inside chunk data, so 64 distinct block changes in a section make the player map send it again.
-- `light status` prints queued, running, audited, fixed, clean, changed and failed counts. Sections below Y 0 are installed but not resent.
+- `light status` prints queued, running, audited, fixed, clean, changed and failed counts.
