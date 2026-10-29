@@ -3,7 +3,6 @@ package com.apocollis.chunksteward.server;
 import com.apocollis.chunksteward.ChunkSteward;
 import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import com.apocollis.chunksteward.mixin.AccessorPlayerChunkMapEntry;
-import com.apocollis.chunksteward.mixin.ChunkChanges;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.management.PlayerChunkMapEntry;

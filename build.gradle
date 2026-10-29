@@ -139,6 +139,15 @@ tasks.register('verifyReleaseJar') {
                     throw new GradleException(
                             "${e.name} class major ${major}, expected 65 (Java 21). Do not change options.release.")
                 }
+                // Mixin refuses to load a class from a mixin package unless it is a mixin or an accessor, which crashes
+                // the game at startup. Interfaces a mixin implements belong in another package.
+                if (e.name.startsWith("com/apocollis/chunksteward/mixin/")) {
+                    def rest = e.name.substring("com/apocollis/chunksteward/mixin/".length())
+                    if (rest.endsWith(".class") && !rest.contains("/") && !rest.startsWith("Mixin") && !rest.startsWith("Accessor")) {
+                        throw new GradleException("${e.name} is a plain class in a mixin package; Mixin cannot load it. " +
+                                "Move it out of com.apocollis.chunksteward.mixin")
+                    }
+                }
                 // Generator mods are compile-only (libs/mods). Only late, class-gated mixin configs and the loader's
                 // presence probes may name their types; anything else would fail to load in a pack without the mod.
                 def lateOnly = ["com/apocollis/chunksteward/mixin/dims/", "com/apocollis/chunksteward/mixin/endexpansion/",

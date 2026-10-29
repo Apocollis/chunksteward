@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * One int read while no staged work is queued.
  */
 @Mixin(value = Chunk.class, priority = 500)
-public abstract class MixinChunkFeatureHold implements ChunkChanges {
+public abstract class MixinChunkFeatureHold implements com.apocollis.chunksteward.server.ChunkChanges {
 
     /** Block changes to this chunk since it loaded; the light audit compares it before and after a worker's pass. */
     @org.spongepowered.asm.mixin.Unique
