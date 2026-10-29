@@ -201,6 +201,11 @@ final class PipelineTable {
         return removed;
     }
 
+    /** The finished jobs whose chunks have not been installed. */
+    List<PipelineJob> readyJobs() {
+        return new ArrayList<PipelineJob>(ready.values());
+    }
+
     int readyCount() {
         return ready.size();
     }
