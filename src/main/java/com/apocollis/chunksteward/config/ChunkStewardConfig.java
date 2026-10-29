@@ -480,6 +480,16 @@ public class ChunkStewardConfig {
         @Config.RangeInt(min = 1, max = 1024)
         public int maxReady = 64;
 
+        @Config.Comment({"Every 20 ticks, drop finished results nothing will take: a chunk that is already loaded, or one no player",
+                "waits for after 15 seconds (120 for preload results). Without it a teleport can leave the ready map full",
+                "and the workers parked. Turn off to compare."})
+        public boolean sweepReady = true;
+
+        @Config.Comment({"A chunk a player waits for may run this many past maxReady, and a worker held off by the cap still runs",
+                "staged populate jobs. 0 = the old behaviour (workers stop at the cap)."})
+        @Config.RangeInt(min = 0, max = 256)
+        public int readyHeadroom = 16;
+
         @Config.Comment("Milliseconds the server thread waits on a worker that already claimed a job before generating it itself.")
         @Config.RangeInt(min = 0, max = 1000)
         public int stealWaitMs = 10;

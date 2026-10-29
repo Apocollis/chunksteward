@@ -246,7 +246,7 @@ public final class TerrainPipeline {
                 if ((++sweepTicks & 127) == 0) {
                     TABLE.sweep(15_000_000_000L);
                 }
-                if (sweepTicks % 20 == 0) {
+                if (sweepTicks % 20 == 0 && ChunkStewardConfig.pipeline.sweepReady) {
                     sweepReady();
                 }
                 ensureGenerators();
@@ -965,11 +965,12 @@ public final class TerrainPipeline {
                 }
                 int ready = TABLE.readyCount();
                 int readyCap = ChunkStewardConfig.pipeline.maxReady;
-                // A chunk a player waits for may run 16 past the cap: the cap holds back preload, not the player.
+                int headroom = ChunkStewardConfig.pipeline.readyHeadroom;
+                // A chunk a player waits for may run past the cap: the cap holds back preload, not the player.
                 if (ready >= readyCap
-                        && (job.speculative || (!evictOldestSpeculative() && ready >= readyCap + 16))) {
+                        && (job.speculative || (!evictOldestSpeculative() && ready >= readyCap + headroom))) {
                     // Held off by a full ready map: staged populate does not need a free slot.
-                    if (runFeature()) {
+                    if (headroom > 0 && runFeature()) {
                         continue;
                     }
                     LockSupport.parkNanos(50_000_000L);
