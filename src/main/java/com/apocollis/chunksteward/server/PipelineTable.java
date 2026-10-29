@@ -160,9 +160,11 @@ final class PipelineTable {
 
     /** Removes a ready result. Counts as installed when the caller kept it. */
     PipelineJob takeReady(int dimension, int x, int z) {
-        PipelineJob job = ready.remove(new PipelineKey(dimension, x, z));
+        PipelineKey key = new PipelineKey(dimension, x, z);
+        PipelineJob job = ready.remove(key);
         if (job != null) {
             installed.incrementAndGet();
+            jobs.remove(key, job);
         }
         return job;
     }
@@ -175,6 +177,28 @@ final class PipelineTable {
             }
         }
         return n;
+    }
+
+    /**
+     * Drops entries nothing waits on any more: cancelled and finished jobs whose result is not in the ready map, and
+     * jobs the server thread claimed (it generates those in the same call, so one this old is done). Without this the
+     * table grew by one entry for every chunk the server thread generated, and each kept its biome snapshot.
+     */
+    int sweep(long maxAgeNanos) {
+        long now = System.nanoTime();
+        int removed = 0;
+        for (java.util.Map.Entry<PipelineKey, PipelineJob> entry : jobs.entrySet()) {
+            PipelineJob job = entry.getValue();
+            int state = job.state.get();
+            boolean stale = state == PipelineJob.CANCELLED
+                    || (state == PipelineJob.DONE && ready.get(entry.getKey()) != job)
+                    || (state == PipelineJob.CLAIMED_MAIN && now - job.createdNanos > maxAgeNanos);
+            if (stale && jobs.remove(entry.getKey(), job)) {
+                job.biomeSnapshot = null;
+                removed++;
+            }
+        }
+        return removed;
     }
 
     int readyCount() {

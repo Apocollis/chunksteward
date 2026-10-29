@@ -230,6 +230,8 @@ public final class TerrainPipeline {
     }
 
     /** Called from the server thread at tick start. Does nothing while the pipeline is idle. */
+    private static int sweepTicks;
+
     static void onTickStart() {
         synchronized (LOCK) {
             if (!engaged()) {
@@ -241,6 +243,9 @@ public final class TerrainPipeline {
             }
             startIfEngaged();
             if (run) {
+                if ((++sweepTicks & 127) == 0) {
+                    TABLE.sweep(15_000_000_000L);
+                }
                 ensureGenerators();
                 rank();
                 watchdog();
@@ -987,6 +992,7 @@ public final class TerrainPipeline {
                 ChunkSteward.LOGGER.warn("pipeline worker failed at {}, {} in {}", job.x, job.z, job.dimension, failed);
             } finally {
                 PipelineMarker.clear();
+                job.biomeSnapshot = null;
                 PipelineStats.generated(slot, job, System.nanoTime() - started, ok);
             }
         }
