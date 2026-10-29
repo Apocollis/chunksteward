@@ -139,7 +139,9 @@ public final class ChunkThrottle {
             return false;
         }
         boolean finished = TerrainPipeline.ready(map.getWorldServer(), entry.getPos().x, entry.getPos().z);
-        if (!urgent && !finished && !starvationDue()) {
+        boolean starved = !urgent && !finished && starvationDue()
+                && TerrainPipeline.mayStarve(map.getWorldServer(), entry.getPos().x, entry.getPos().z);
+        if (!urgent && !finished && !starved) {
             PipelineStats.provide(PipelineStats.PROVIDE_NOT_FINISHED);
             TickMonitor.countSkipped();
             if (debug) {

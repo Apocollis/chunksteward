@@ -513,6 +513,28 @@ public final class TerrainPipeline {
                 && job.epoch == TABLE.epoch(job.dimension);
     }
 
+    /** When a worker last finished a chunk. */
+    private static volatile long lastDoneNanos = System.nanoTime();
+
+    /**
+     * Whether the starvation guard may have the server thread generate this chunk, which costs about 100 ms with a
+     * Depths world. Not while the pipeline is working on it (a job that has waited under three seconds) or is making
+     * progress (a worker finished a chunk in the last five). A chunk with no job yet is not starving either: ranking
+     * queues the nearest chunks first, and vanilla's order is not ours. A trace showed 85 of 1,740 chunks generated
+     * this way, all "no job queued", about eight seconds of server thread.
+     */
+    static boolean mayStarve(World world, int x, int z) {
+        if (world == null) {
+            return true;
+        }
+        long now = System.nanoTime();
+        PipelineJob job = TABLE.jobAt(world.provider.getDimension(), x, z);
+        if (job != null && job.state.get() <= PipelineJob.CLAIMED_WORKER && now - job.createdNanos < 3_000_000_000L) {
+            return false;
+        }
+        return now - lastDoneNanos > 5_000_000_000L;
+    }
+
     static boolean ready(World world, int x, int z) {
         if (world == null) {
             return false;
@@ -977,6 +999,7 @@ public final class TerrainPipeline {
                 PipelineKey key = new PipelineKey(job.dimension, job.x, job.z);
                 CHUNKS.put(key, held[0]);
                 job.doneNanos = System.nanoTime();
+                lastDoneNanos = job.doneNanos;
                 if (ChunkStewardConfig.pipeline.biomeCheck && job.biomeSnapshot == null) {
                     job.biomeSamples = BiomeCheck.sample(used, job.x, job.z);
                 }
