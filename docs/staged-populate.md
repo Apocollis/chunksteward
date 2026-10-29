@@ -51,7 +51,7 @@ The staged tail is a copy of RTG-Plus 9.0.3. Staging runs only when the SHA-256 
 
 ## Light (Arcana Quest Tweaks)
 
-`ChunkStewardAPI.registerPopulateScope` (version 4) lets a mod bracket the work Chunk Wizard finishes after the populate call returned. Arcana Quest Tweaks registers one so its populate relight records the applied writes and the tail the way it records an unstaged populate.
+`ChunkStewardAPI.registerPopulateScope` (version 4) lets a mod bracket the work Chunk Steward finishes after the populate call returned. Arcana Quest Tweaks registers one so its populate relight records the applied writes and the tail the way it records an unstaged populate.
 
 ## Config (`features`)
 

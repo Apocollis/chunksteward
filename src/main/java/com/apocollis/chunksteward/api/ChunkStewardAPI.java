@@ -3,11 +3,11 @@ package com.apocollis.chunksteward.api;
 import com.apocollis.chunksteward.server.PacingView;
 
 /**
- * Read-only pacing information from Chunk Wizard, for mods that spread their own work across ticks (dungeon
+ * Read-only pacing information from Chunk Steward, for mods that spread their own work across ticks (dungeon
  * builders, structure pasters, anything that can run in slices).
  *
  * <p>Call it on the server thread, inside guarded code: put calls in a small holder class that is only loaded when
- * {@code Loader.isModLoaded("chunksteward")}, so this class is never touched when Chunk Wizard is absent. See
+ * {@code Loader.isModLoaded("chunksteward")}, so this class is never touched when Chunk Steward is absent. See
  * {@code docs/api.md} for the pattern.
  *
  * <p>The averages cover about the last 20 ticks, so they suit pacing and not exact decisions about the current tick;
@@ -135,7 +135,7 @@ public final class ChunkStewardAPI {
     }
 
     /**
-     * Registers {@code scope} once; a second call with the same instance does nothing. Chunk Wizard calls it around
+     * Registers {@code scope} once; a second call with the same instance does nothing. Chunk Steward calls it around
      * populate work it finishes after the populate call returned (staged populate). (Version 4.)
      */
     public static void registerPopulateScope(PopulateScope scope) {

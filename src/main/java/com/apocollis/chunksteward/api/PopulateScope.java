@@ -4,7 +4,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 
 /**
- * Brackets populate work that Chunk Wizard finishes later than the populate call itself. With staged populate, the
+ * Brackets populate work that Chunk Steward finishes later than the populate call itself. With staged populate, the
  * server thread applies a chunk's decorations and runs the rest of its populate after the call returned; a mod that
  * recorded or deferred work inside the populate call (light, for one) opens its scope again for that part.
  * Both methods run on the server thread, {@code end} after {@code begin} for the same chunk, never nested for one chunk.
@@ -19,7 +19,7 @@ public interface PopulateScope {
     void end(World world, Chunk chunk);
 
     /**
-     * Chunk Wizard installed this chunk's light and column heights, computed on a terrain worker, after the chunk's
+     * Chunk Steward installed this chunk's light and column heights, computed on a terrain worker, after the chunk's
      * staged block writes were applied. Light work a mod recorded or deferred for the chunk (relight columns, light checks,
      * the opening full check) is obsolete and should be dropped. Called between {@link #begin} and {@link #end}. Optional:
      * the default does nothing. (Version 5.)

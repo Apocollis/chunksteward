@@ -1,12 +1,12 @@
 [
 {
   "modid": "chunksteward",
-  "name": "Chunk Wizard",
+  "name": "Chunk Steward",
   "description": "Paces chunk generation and populate across ticks, preloads terrain around players, and keeps stray chunk loading in check, to avoid tick lag. Formerly Lazy Chunks.",
   "version": "${version}",
   "mcversion": "1.12.2",
   "authorList": ["Apocollis"],
   "logoFile": "chunksteward_logo.png",
-  "credits": "Behavior modeled on Lazy Chunk Load (MIT) by its authors. Logo edited from \"Chunk of Minecraft\" by ishmanallenlitchmore (deviantart.com/ishmanallenlitchmore/art/chunk-of-minecraft-382711453). Minecraft is (c) Mojang Studios. Chunk Wizard is not an official Minecraft product and is not approved by or associated with Mojang or Microsoft."
+  "credits": "Behavior modeled on Lazy Chunk Load (MIT) by its authors. Logo edited from \"Chunk of Minecraft\" by ishmanallenlitchmore (deviantart.com/ishmanallenlitchmore/art/chunk-of-minecraft-382711453). Minecraft is (c) Mojang Studios. Chunk Steward is not an official Minecraft product and is not approved by or associated with Mojang or Microsoft."
 }
 ]
