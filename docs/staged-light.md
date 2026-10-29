@@ -50,3 +50,7 @@ The same engine can audit chunks that are already loaded. `light verify` showed 
 - At tick end (3 ms budget) the server installs a result only if none of the window's chunks was replaced, held by a staged job, or had a block change since the audit began (`ChunkChanges` counts direct block writes per chunk). Otherwise the result is dropped and counted as "changed".
 - An install uses the same code as the light stage, queues boundary `checkLight`s, and resends the changed sections: the client only receives light inside chunk data, so 64 distinct block changes in a section make the player map send it again.
 - `light status` prints queued, running, audited, fixed, clean, changed and failed counts.
+
+## Precipitation height
+
+The adapter records, per column of the 34x34 box, one above the highest block from Y 1 up whose material blocks movement or is a liquid, which is what `Chunk.getPrecipitationHeight` computes (and caches) for rain and snow. The install copies it into each chunk's precipitation height map. Without it the install had to reset the cache, and the first read of each column (Serene Seasons reads all of them after a populate) walked the chunk on the server thread. `light verify` compares the worker's value with vanilla's walk for every column of each window it checks.

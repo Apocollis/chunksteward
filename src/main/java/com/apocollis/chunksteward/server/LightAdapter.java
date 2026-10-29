@@ -60,6 +60,9 @@ final class LightAdapter {
         int z0 = cz * 16 - 1;
         IBlockState air = Blocks.AIR.getDefaultState();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        // Vanilla's precipitation height: one above the highest block (from Y 1 up) that blocks movement or is a liquid.
+        int[] rainTop = new int[SIZE * SIZE];
+        java.util.Arrays.fill(rainTop, -1);
         for (int z = 0; z < SIZE; z++) {
             for (int x = 0; x < SIZE; x++) {
                 boolean ring = x == 0 || z == 0 || x == SIZE - 1 || z == SIZE - 1;
@@ -82,6 +85,9 @@ final class LightAdapter {
                     }
                     engine.setOpacity(i, state.getLightOpacity(world, pos));
                     engine.setEmission(i, state.getLightValue(world, pos));
+                    if (wy > 0 && (state.getMaterial().blocksMovement() || state.getMaterial().isLiquid())) {
+                        rainTop[z * SIZE + x] = wy + 1;
+                    }
                 }
             }
         }
@@ -131,6 +137,17 @@ final class LightAdapter {
                     }
                     result.sky[chunkIndex][section] = skyData;
                     result.block[chunkIndex][section] = blockData;
+                }
+            }
+        }
+
+        result.rain = new int[4][256];
+        for (int dx = 0; dx < 2; dx++) {
+            for (int dz = 0; dz < 2; dz++) {
+                for (int lz = 0; lz < 16; lz++) {
+                    for (int lx = 0; lx < 16; lx++) {
+                        result.rain[dz * 2 + dx][lz << 4 | lx] = rainTop[(1 + dz * 16 + lz) * SIZE + 1 + dx * 16 + lx];
+                    }
                 }
             }
         }

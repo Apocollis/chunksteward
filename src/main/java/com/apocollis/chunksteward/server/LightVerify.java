@@ -54,6 +54,9 @@ final class LightVerify {
         long blockMissed = 0;
         long blockBoth = 0;
         int chunksWithDifferences = 0;
+        long rainDiff = 0;
+        long rainCompared = 0;
+        String rainExample = null;
         int examplesThisChunk;
         for (Chunk center : candidates) {
             if (checked >= count || System.nanoTime() - started > 6_000_000_000L) {
@@ -75,6 +78,23 @@ final class LightVerify {
                 }
             }, center.x, center.z, 0, null);
             checked++;
+            for (int dx = 0; dx < 2; dx++) {
+                for (int dz = 0; dz < 2; dz++) {
+                    Chunk rainChunk = window.get(key(center.x + dx, center.z + dz));
+                    for (int column = 0; column < 256; column++) {
+                        int expected = vanillaPrecipitationHeight(rainChunk, column & 15, column >> 4);
+                        int mine = result.rain[dz * 2 + dx][column];
+                        rainCompared++;
+                        if (expected != mine) {
+                            rainDiff++;
+                            if (rainExample == null) {
+                                rainExample = "  rain height differs at " + (rainChunk.x * 16 + (column & 15)) + ","
+                                        + (rainChunk.z * 16 + (column >> 4)) + ": worker " + mine + ", vanilla " + expected;
+                            }
+                        }
+                    }
+                }
+            }
             examplesThisChunk = 0;
             long diffBefore = skyDiff + blockDiff;
             for (int dx = 0; dx < 2; dx++) {
@@ -145,6 +165,10 @@ final class LightVerify {
                 + " ms per chunk including the compare); sky differs " + skyDiff + " (worker lower " + skyLower
                 + "), block differs " + blockDiff + " (worker lower " + blockLower + ", worker lit where stored is 0 "
                 + blockMissed + ", both lit " + blockBoth + "); chunks with a difference " + chunksWithDifferences);
+        lines.add(1, "  precipitation height: " + rainCompared + " columns compared, " + rainDiff + " differ");
+        if (rainExample != null) {
+            lines.add(2, rainExample);
+        }
         if (checked == 0) {
             lines.add("  no chunk near you has its whole 4x4 window loaded, populated and light populated");
         }
@@ -208,5 +232,18 @@ final class LightVerify {
             }
         }
         return true;
+    }
+
+    /** Vanilla's {@code Chunk.getPrecipitationHeight} walk, without the cache. */
+    private static int vanillaPrecipitationHeight(Chunk chunk, int x, int z) {
+        int y = chunk.getTopFilledSegment() + 15;
+        while (y > 0) {
+            net.minecraft.block.material.Material material = chunk.getBlockState(x, y, z).getMaterial();
+            if (material.blocksMovement() || material.isLiquid()) {
+                return y + 1;
+            }
+            y--;
+        }
+        return -1;
     }
 }

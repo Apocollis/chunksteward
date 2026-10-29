@@ -95,7 +95,7 @@ final class LightStage implements FeatureStage {
     }
 
     private void installChunk(Chunk chunk, LightResult light, int index, boolean center) {
-        installHeights(chunk, light);
+        installHeights(chunk, light, index);
         installArrays(chunk, light, index);
         // The centre chunk's own populate is what this light finishes; a neighbour only when its populate has started.
         if (center || chunk.isTerrainPopulated()) {
@@ -105,7 +105,7 @@ final class LightStage implements FeatureStage {
     }
 
     /** Heights of the columns the job wrote to, exactly as the worker's height map rule left them. */
-    private static void installHeights(Chunk chunk, LightResult light) {
+    private static void installHeights(Chunk chunk, LightResult light, int index) {
         int[] heightMap = chunk.getHeightMap();
         int[] precipitation = ((AccessorChunk) chunk).chunksteward$precipitationHeightMap();
         for (int c = 0; c < light.heightX.length; c++) {
@@ -117,6 +117,11 @@ final class LightStage implements FeatureStage {
             int column = (z & 15) << 4 | (x & 15);
             heightMap[column] = light.heightY[c];
             precipitation[column] = -999;
+        }
+        // The worker also computed the precipitation height of every column, so the first read (Serene Seasons reads
+        // it for each column of a populated chunk) does not walk the chunk again on the server thread.
+        if (light.rain != null) {
+            System.arraycopy(light.rain[index], 0, precipitation, 0, 256);
         }
         int lowest = Integer.MAX_VALUE;
         for (int h : heightMap) {

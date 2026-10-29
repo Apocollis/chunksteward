@@ -9,6 +9,7 @@ public class ChunkStewardConfig {
 
     public static Throttle throttle = new Throttle();
     public static Movement movement = new Movement();
+    public static Spawner spawner = new Spawner();
     public static Ordering ordering = new Ordering();
     public static Populate populate = new Populate();
     public static RandomTicks randomTicks = new RandomTicks();
@@ -161,6 +162,26 @@ public class ChunkStewardConfig {
                 "preload tier react up to this long after a change. 1 = every tick."})
         @Config.RangeInt(min = 1, max = 40)
         public int sampleTicks = 10;
+    }
+
+    public static class Spawner {
+        @Config.Comment({"Pause natural mob spawning around a player who is moving fast, so a flight through loading chunks is not",
+                "also paying for the spawner (it visits every chunk within 8 chunks of each player every tick, and fires",
+                "mods' potential-spawn events for each attempt). A chunk that a slower player also has in range keeps spawning.",
+                "Spawning resumes resumeDelayTicks after the player slows down. Mobs already in the world are untouched, and",
+                "so are the mobs placed when a chunk is generated, spawner blocks and other mods' own spawning."})
+        public boolean pauseWhileFast = false;
+
+        @Config.Comment("Blocks per tick above which the player counts as moving fast. Sprinting is about 0.28, creative flight 0.5 to 1.1, an elytra 1.5 and more.")
+        @Config.RangeDouble(min = 0.1, max = 10.0)
+        public double pauseSpeed = 1.0;
+
+        @Config.Comment("Ticks after the player last moved fast before spawning resumes (20 = 1 second).")
+        @Config.RangeInt(min = 0, max = 1200)
+        public int resumeDelayTicks = 60;
+
+        @Config.Comment("Dimension ids the pause applies to. Empty = every dimension.")
+        public int[] dimensions = new int[0];
     }
 
     public static class Ordering {

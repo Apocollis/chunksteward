@@ -208,6 +208,7 @@ public final class FeatureStats {
                 .append(", on worker ").append(TOTAL.get(WORKER_OK))
                 .append(", inline ").append(TOTAL.get(INLINE_TILE) + TOTAL.get(INLINE_WINDOW)
                         + TOTAL.get(INLINE_UNSUPPORTED) + TOTAL.get(INLINE_TIMEOUT) + TOTAL.get(INLINE_ERROR));
+        out.append(SpawnerPause.reportAndReset());
         String culprits = top(CULPRITS, 3, false);
         if (!culprits.isEmpty()) {
             out.append("; aborts by class (session) ").append(culprits);

@@ -19,6 +19,8 @@ final class LightResult {
     int[] heightZ = new int[0];
     int[] heightY = new int[0];
     long[] boundary = new long[0];
+    /** {@code [chunk][z << 4 | x]}: vanilla's precipitation height of every column of the write window, or null. */
+    int[][] rain;
 
     LightResult(int chunkX, int chunkZ, int yLow, int sections) {
         this.chunkX = chunkX;

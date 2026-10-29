@@ -27,6 +27,7 @@
     "MixinWorldFeature",
     "MixinWorldPipeline",
     "MixinWorldProviderPipeline",
+    "MixinWorldEntitySpawner",
     "MixinWorldServer"
   ]
 }
