@@ -153,7 +153,16 @@ final class LightAdapter {
                     int nx = x + d[0];
                     int nz = z + d[1];
                     if (nx == 0 || nz == 0 || nx == SIZE - 1 || nz == SIZE - 1) {
-                        if (boundary.size() < boundaryCap) {
+                        int ring = engine.index(nx, y, nz);
+                        int step = Math.max(1, engine.opacity[ring]);
+                        // Only a ring cell that is now wrong: too dark for the inside value, or lit by the inside
+                        // value as it was and that value has dropped. A populate changes most border cells, and
+                        // checking every neighbour of each hit the cap on nearly every job.
+                        boolean wrong = engine.sky[i] - step > engine.sky[ring]
+                                || engine.block[i] - step > engine.block[ring]
+                                || (oldSkyValue - step == engine.sky[ring] && engine.sky[i] < oldSkyValue)
+                                || (oldBlockValue - step == engine.block[ring] && engine.block[i] < oldBlockValue);
+                        if (wrong && boundary.size() < boundaryCap) {
                             boundary.add(new BlockPos(x0 + nx, yLow + y, z0 + nz).toLong());
                         }
                     }

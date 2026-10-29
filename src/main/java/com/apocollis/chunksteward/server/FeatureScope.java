@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.server;
 
+import com.apocollis.chunksteward.config.ChunkStewardConfig;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
@@ -153,7 +154,7 @@ final class FeatureScope {
         if (old == state) {
             return false;
         }
-        if (hasTileEntity(state) || hasTileEntity(old)) {
+        if ((hasTileEntity(state) && !placeableWithoutTileEntity(state)) || hasTileEntity(old)) {
             Block block = hasTileEntity(state) ? state.getBlock() : old.getBlock();
             throw abort("tile entity block " + block.getRegistryName() + " at " + x + "," + y + "," + z);
         }
@@ -167,6 +168,21 @@ final class FeatureScope {
         int next = ColumnHeights.afterWrite(heightOf(x, z), x, y, z, opacity, this::opacityAt);
         heights.put(column, next);
         return true;
+    }
+
+    /** A tile entity block the config lists: the journal replay on the server creates its tile entity. */
+    private static boolean placeableWithoutTileEntity(IBlockState state) {
+        net.minecraft.util.ResourceLocation name = state.getBlock().getRegistryName();
+        if (name == null) {
+            return false;
+        }
+        String id = name.toString();
+        for (String allowed : ChunkStewardConfig.features.tileEntityBlocks) {
+            if (allowed != null && allowed.trim().equals(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasTileEntity(IBlockState state) {

@@ -114,6 +114,11 @@ public final class FeatureLane {
     }
 
     /** The lock the decoration objects need: a worker holds it for a job, inline decorations take it while staging is on. */
+    /** True when staged populate is on and few jobs wait, so another populate will most likely go to a worker. */
+    static boolean accepting() {
+        return ChunkStewardConfig.features.enabled && held < 24;
+    }
+
     public static ReentrantLock decoLock() {
         return DECO;
     }

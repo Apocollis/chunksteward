@@ -149,10 +149,12 @@ final class PopulateQueue {
                     break;
                 }
             } else {
-                if (done >= cfg.drainPerTick) {
+                // A populate that goes to a worker costs the server thread little; its apply has its own time cap.
+                boolean staged = done < cfg.stagedDrainPerTick && FeatureLane.accepting();
+                if (done >= (staged ? cfg.stagedDrainPerTick : cfg.drainPerTick)) {
                     break;
                 }
-                if (TickMonitor.currentTickMs() >= cfg.tickBudgetMs && !(starved && done == 0 && urgent == 0)) {
+                if (!staged && TickMonitor.currentTickMs() >= cfg.tickBudgetMs && !(starved && done == 0 && urgent == 0)) {
                     break;
                 }
             }

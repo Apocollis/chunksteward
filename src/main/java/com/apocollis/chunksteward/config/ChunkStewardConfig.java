@@ -65,6 +65,11 @@ public class ChunkStewardConfig {
                 "hellfirepvp.astralsorcery.", "thaumcraft.", "thebetweenlands.", "ivorius.reccomplex."
         };
 
+        @Config.Comment({"Blocks with a tile entity that a worker may place without reading or configuring the tile entity (registry",
+                "names). The server thread creates the tile entity when it replays the write. Any other tile entity block",
+                "makes the whole job run inline. List only blocks whose generator does not touch their tile entity."})
+        public String[] tileEntityBlocks = new String[] {"soot:sulfur_ore"};
+
         @Config.Comment({"EXPERIMENTAL. Compute the light of a staged chunk's 2x2 window on the terrain worker and install it as arrays,",
                 "instead of the server thread flooding it block by block (the largest cost of a populate on the server thread).",
                 "Run /chunksteward light verify first: it compares the worker's light with vanilla's on loaded chunks."})
@@ -201,6 +206,12 @@ public class ChunkStewardConfig {
         @Config.Comment("At most this many queued populates are run per tick (within the tick budget).")
         @Config.RangeInt(min = 1, max = 64)
         public int drainPerTick = 3;
+
+        @Config.Comment({"With staged populate on and fewer than 24 jobs waiting, up to this many queued populates are run per tick",
+                "without the tickBudgetMs check: the decorations run on a worker, and the server thread's part is capped by",
+                "features.promoteMs. Set it equal to drainPerTick to keep the old behaviour."})
+        @Config.RangeInt(min = 1, max = 64)
+        public int stagedDrainPerTick = 4;
 
         @Config.Comment({"A chunk generated while another chunk is populating (a cascade: a generator read or wrote past",
                 "the loaded area) is generated terrain only and populated later through the queue, instead of inside the",
