@@ -26,6 +26,9 @@ public final class Pregen {
             return "chunks waiting";
         }
         ChunkStewardConfig.Preload cfg = ChunkStewardConfig.preload;
+        if (cfg.slowTickBackoffTicks > 0 && TickMonitor.ticksSince(TickMonitor.lastSlowTick) < cfg.slowTickBackoffTicks) {
+            return "slow tick";
+        }
         if (TickMonitor.recentExternalGen(cfg.busyWindowTicks) >= cfg.busyChunks) {
             return "busy generating";
         }

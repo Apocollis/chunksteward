@@ -40,6 +40,8 @@ public final class TickMonitor {
     static double otherEmaMs;
     /** Average ms of whole-tick work. */
     static double totalEmaMs;
+    /** The last tick that ran longer than {@code preload.slowTickMs}. */
+    static int lastSlowTick = Integer.MIN_VALUE / 2;
     /** Average ms of throttled chunk provision (generation) per tick. */
     static double chunkEmaMs;
     static boolean primed;
@@ -84,6 +86,9 @@ public final class TickMonitor {
         long now = System.nanoTime();
         EXTERNAL_RING[tick & 255] = externalGenThisTick;
         double totalMs = (now - tickStartNanos) / 1.0e6;
+        if (totalMs > ChunkStewardConfig.preload.slowTickMs) {
+            lastSlowTick = tick;
+        }
         recordWork(totalMs);
         double chunkMs = chunkNanos / 1.0e6;
         double otherMs = Math.max(0.0, totalMs - chunkMs);

@@ -30,7 +30,7 @@ A hotspot is worked on only when all of these hold:
 - `/chunksteward pregen pause` is not active and `maxTotalChunks` is not reached.
 - A pipeline verify is not running in the player's dimension ([pipeline.md](pipeline.md)).
 
-At most `opsPerTick` (2) operations per tick and `maxOpsPerMinute` (1200) per hotspot. The terrain phase only queues work for the terrain workers and installs what they finished, so it costs the server thread little.
+Paced at `maxOpsPerSecond` (8) operations a second, spread evenly (a token bucket, never more than one per tick), and `maxOpsPerMinute` (1200) per hotspot. After a tick longer than `preload.slowTickMs` (60) both preload and stage 2 wait `preload.slowTickBackoffTicks` (60) ticks. The terrain phase only queues work for the terrain workers and installs what they finished, so it costs the server thread little.
 
 Work goes in square rings out from the hotspot's center chunk:
 1. **Terrain phase**, rings 0..radiusTerrain: each chunk that is not loaded, not known (`GeneratedCache`) and not on disk is generated terrain-only (`StageGate.beginTerrainOnly`: populate deferred) and released at once. This makes the outer neighbours that every later populate needs exist on disk. When `pipeline.speculative` is on and the dimension is being served, that generate is queued behind player chunks. The ring keeps the chunk at its head until a finished result can be installed, and this interval does not advance the ring.
@@ -46,6 +46,6 @@ Stage 2's own terrain generation is not counted as "external generation" for the
 
 ## Config (`stage2`)
 
-`enabled` (true), `radiusFull` (20), `radiusTerrain` (30), `dwellSeconds` (180), `trafficCreditPercent` (50), `trafficMaxSpeed` (0.6), `dwellSampleSeconds` (10), `dwellAnchorRadiusBlocks` (32), `cellSizeChunks` (8), `mergeRadiusChunks` (8), `homeFromBed` (true), `maxHotspotDistanceChunks` (0), `requirePlayerPreload` (false), `opsPerTick` (2), `maxOpsPerMinute` (1200), `maxTickMs` (30), `warnTotalChunks` (100000), `maxTotalChunks` (0).
+`enabled` (true), `radiusFull` (20), `radiusTerrain` (30), `dwellSeconds` (180), `trafficCreditPercent` (50), `trafficMaxSpeed` (0.6), `dwellSampleSeconds` (10), `dwellAnchorRadiusBlocks` (32), `cellSizeChunks` (8), `mergeRadiusChunks` (8), `homeFromBed` (true), `maxHotspotDistanceChunks` (0), `requirePlayerPreload` (false), `maxOpsPerSecond` (8), `maxOpsPerMinute` (1200), `maxTickMs` (30), `warnTotalChunks` (100000), `maxTotalChunks` (0).
 
 Disk: about 9.4 KB per chunk measured on a test world, so about 35 MB for a full 61x61 hotspot. Natural villages and Roguelike dungeons inside the area are generated while the hotspot is worked (their jobs run under their own budgets).

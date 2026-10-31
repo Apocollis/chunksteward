@@ -38,7 +38,7 @@ import java.util.Map;
  * deferral: stage 2 has already checked there is room.</li>
  * </ol>
  * Progress is the last completed ring of each phase, saved in {@link HotspotData}; a ring cut short is redone, and
- * chunks that already exist or are populated only cost a load. At most {@code opsPerTick} operations per tick.
+ * chunks that already exist or are populated only cost a load. Paced at {@code maxOpsPerSecond}, never more than one per tick.
  */
 @Mod.EventBusSubscriber
 public final class Stage2Pregen {
@@ -59,6 +59,7 @@ public final class Stage2Pregen {
 
     private static final Map<Long, Work> WORK = new HashMap<>();
     private static int rotate;
+    private static double tokens;
     private static boolean warned;
 
     private static long statGenerated;
@@ -95,17 +96,21 @@ public final class Stage2Pregen {
         if (server == null) {
             return;
         }
+        // A token bucket, so the work is spread evenly instead of arriving in bursts.
+        tokens = Math.min(1.0, tokens + cfg.maxOpsPerSecond / 20.0);
+        if (tokens < 1.0) {
+            return;
+        }
         List<EntityPlayerMP> players = server.getPlayerList().getPlayers();
         int done = 0;
-        for (int i = 0; i < players.size() && done < cfg.opsPerTick; i++) {
+        for (int i = 0; i < players.size() && done < 1; i++) {
             EntityPlayerMP player = players.get((rotate + i) % players.size());
             if (!eligible(player)) {
                 continue;
             }
             WorldServer world = player.getServerWorld();
             HotspotData data = HotspotData.get(world);
-            // One player's hotspot can take every operation of the tick; the next tick starts with the next player.
-            while (done < cfg.opsPerTick) {
+            while (done < 1) {
                 HotspotData.Hotspot hotspot = nearestActive(data, player, cfg);
                 if (hotspot == null) {
                     break;
@@ -125,6 +130,7 @@ public final class Stage2Pregen {
                     break;
                 }
                 done++;
+                tokens -= 1.0;
                 rotate = (rotate + i + 1) % players.size();
             }
         }

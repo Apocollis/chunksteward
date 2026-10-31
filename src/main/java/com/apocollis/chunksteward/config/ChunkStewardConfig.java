@@ -319,6 +319,15 @@ public class ChunkStewardConfig {
         @Config.RangeInt(min = 1, max = 250)
         public int busyWindowTicks = 100;
 
+        @Config.Comment({"After a tick longer than slowTickMs, preload and stage 2 wait this many ticks before generating again, so a",
+                "hitch is not followed by more work. 0 = off."})
+        @Config.RangeInt(min = 0, max = 1200)
+        public int slowTickBackoffTicks = 60;
+
+        @Config.Comment("A tick this long (ms) counts as a hitch for slowTickBackoffTicks.")
+        @Config.RangeDouble(min = 20.0, max = 1000.0)
+        public double slowTickMs = 60.0;
+
         @Config.Comment("Preload holds off while this many populates are queued.")
         @Config.RangeInt(min = 0, max = 4096)
         public int maxPopulateBacklog = 4;
@@ -400,10 +409,11 @@ public class ChunkStewardConfig {
                 "player's chunks, then preload, then stage 2 take the pipeline's room in that order, so stage 2 starts at once."})
         public boolean requirePlayerPreload = false;
 
-        @Config.Comment({"At most this many operations (a generation or a populate) per tick, while the tick stays under maxTickMs.",
-                "The terrain phase only queues work for the terrain workers and installs what they finished."})
-        @Config.RangeInt(min = 1, max = 32)
-        public int opsPerTick = 2;
+        @Config.Comment({"Operations (a generation or a populate) per second, spread evenly: never more than one per tick, and only while",
+                "the tick stays under maxTickMs. The terrain phase only queues work for the terrain workers and installs what",
+                "they finished. Lower it if you see TPS hitches while stage 2 is working."})
+        @Config.RangeInt(min = 1, max = 20)
+        public int maxOpsPerSecond = 8;
 
         @Config.Comment("At most this many operations per hotspot per minute.")
         @Config.RangeInt(min = 1, max = 60000)
