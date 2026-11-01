@@ -63,7 +63,8 @@ public class ChunkStewardConfig {
                 "in a dot. Use it for a generator that keeps global state, saves world data or talks to other threads;",
                 "those are the ones a worker cannot detect."})
         public String[] serverOnlyGenerators = new String[] {
-                "hellfirepvp.astralsorcery.", "thaumcraft.", "thebetweenlands.", "ivorius.reccomplex."
+                "hellfirepvp.astralsorcery.", "thaumcraft.", "thecodex6824.thaumcraftfix.",
+                "thebetweenlands.", "ivorius.reccomplex."
         };
 
         @Config.Comment({"Blocks with a tile entity that a worker may place without reading or configuring the tile entity (registry",

@@ -42,6 +42,9 @@ Behavior modeled on the MIT-licensed Modrinth mod Lazy Chunk Load (1.20.1+). Cod
 | `MixinChunkProviderServer` | `func_186025_d` HEAD (cancellable) | random-tick guard (empty chunk) |
 | `MixinChunkProviderServer` | `func_186025_d` at `IChunkGenerator.func_185932_a` INVOKE, before and after | terrain timing, cascade detection, known-generated cache |
 | `MixinWorldServer` | `func_147456_g` HEAD/RETURN | brackets the random-tick pass |
+| `MixinWorldServer` | `scheduleUpdate`, `updateBlockTick`, `scheduleBlockUpdate`, `addBlockEvent` HEAD | a feature job that reaches these `WorldServer` overrides aborts |
+| `MixinExtendedBlockStorage` | `set` (`func_177484_a`) HEAD | a feature job that writes a section directly aborts |
+| `MixinSPacketChunkData` | `getWriteBuffer` `Unpooled.wrappedBuffer`; `extractChunkData` RETURN | chunk packet buffer can grow, then `buffer` is the bytes written |
 | `AccessorPlayerChunkMap` | `field_72698_e` (get) | view distance for preload radii |
 | `MixinGameRegistry` | `@Redirect` of `IWorldGenerator.generate` inside Forge `GameRegistry.generateWorld` (`remap = false`) | per-generator timing |
 | `MixinMapGenBase` | `MapGenBase.func_186125_a` HEAD/RETURN | terrain-stage map-gen timing by class (caves, ravines, structure layout) |

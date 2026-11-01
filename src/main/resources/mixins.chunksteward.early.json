@@ -13,6 +13,8 @@
     "AccessorPlayerChunkMap",
     "AccessorPlayerChunkMapEntry",
     "MixinChunk",
+    "MixinExtendedBlockStorage",
+    "MixinSPacketChunkData",
     "MixinChunkFeatureHold",
     "MixinChunkGeneratorEnd",
     "MixinChunkGeneratorHell",

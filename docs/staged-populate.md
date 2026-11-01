@@ -32,7 +32,7 @@ While a job runs, `World` calls made on that thread are answered from the job's 
 - **Writes** go to a journal (`FeatureJournal`): block, flags, in order. Writes are allowed only in the 2x2 chunks cx..cx+1, cz..cz+1 (RTG decorates around the chunk centre offset by 8 blocks).
 - **Heights** (`getHeight`, `canSeeSky`, precipitation height, top solid block) are worked out from the same view with the vanilla height-map rule, so a decoration placed after a tree sees the tree. The worker reads the height array directly and never calls `Chunk.getHeightValue`; before the job is accepted the server thread reads every column of the window once, which makes Arcana Quest Tweaks replay any pending light work on the server thread.
 - **Light checks** (`World.checkLight`) are recorded and replayed on the server thread.
-- **Anything else aborts the job**: a read or write outside the window, a block with a tile entity, a direct `Chunk.setBlockState`, `spawnEntity`, `scheduleUpdate`, `setTileEntity`, `notifyNeighborsOfStateChange`. An aborted job is run inline on the server thread, with the same starting `Random` state, and gives the world the same blocks. The first 20 reasons are logged (`features.logAborts`).
+- **Anything else aborts the job**: a read or write outside the window, a block with a tile entity, a direct `Chunk.setBlockState` or `ExtendedBlockStorage.set`, `spawnEntity`, `scheduleUpdate`, `updateBlockTick`, `scheduleBlockUpdate`, `addBlockEvent`, `setTileEntity`, `addTileEntity`, `removeTileEntity`, `notifyNeighborsOfStateChange`. The tick and block-event calls are `WorldServer` overrides that do not call `super`. An aborted job is run inline on the server thread, with the same starting `Random` state, and gives the world the same blocks. The first 20 reasons are logged (`features.logAborts`).
 
 ## Ordering and holds
 
@@ -63,7 +63,7 @@ The staged tail is a copy of RTG-Plus 9.0.3. Staging runs only when the SHA-256 
 | `maxWaitSeconds` | 10 | A job older than this is run inline. |
 | `logAborts` | true | Log why a job fell back to the server thread, once per reason and mod class. |
 | `modGenerators` | true | Run the mod `IWorldGenerator`s of staged chunks on a worker too (with `enabled`). |
-| `serverOnlyGenerators` | AstralSorcery, Thaumcraft, Betweenlands, Recurrent Complex | Generator classes (full name, or package prefix ending in a dot) that always run on the server thread. |
+| `serverOnlyGenerators` | AstralSorcery, Thaumcraft, Thaumcraft Fix, Betweenlands, Recurrent Complex | Generator classes (full name, or package prefix ending in a dot) that always run on the server thread. An existing cfg keeps its old list. |
 | `lightStage` | false | Experimental: compute the 2x2 window's light on the worker and install it ([staged-light.md](staged-light.md)). |
 | `lightBoundaryChecks` | 4096 | Most cells outside the window checked after a worker light install. |
 | `demoteAfterAborts` | 3 | Aborts or errors in one generator class before it is demoted for the session. |

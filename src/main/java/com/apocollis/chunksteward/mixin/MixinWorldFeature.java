@@ -12,6 +12,7 @@ import net.minecraft.village.VillageCollection;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.storage.MapStorage;
 import com.google.common.base.Predicate;
+import java.util.Collection;
 import java.util.List;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -146,6 +147,22 @@ public abstract class MixinWorldFeature {
             at = @At("HEAD"))
     private void chunksteward$featureSetTileEntity(BlockPos pos, TileEntity tile, CallbackInfo ci) {
         FeatureHooks.unsupported("setTileEntity");
+    }
+
+    /** Not overridden on {@code WorldServer}, so this hook runs for the server world. */
+    @Inject(method = "addTileEntity(Lnet/minecraft/tileentity/TileEntity;)Z", at = @At("HEAD"))
+    private void chunksteward$featureAddTile(TileEntity tile, CallbackInfoReturnable<Boolean> cir) {
+        FeatureHooks.unsupported("addTileEntity");
+    }
+
+    @Inject(method = "addTileEntities(Ljava/util/Collection;)V", at = @At("HEAD"))
+    private void chunksteward$featureAddTiles(Collection<TileEntity> tiles, CallbackInfo ci) {
+        FeatureHooks.unsupported("addTileEntity");
+    }
+
+    @Inject(method = "removeTileEntity(Lnet/minecraft/util/math/BlockPos;)V", at = @At("HEAD"))
+    private void chunksteward$featureRemoveTile(BlockPos pos, CallbackInfo ci) {
+        FeatureHooks.unsupported("removeTileEntity");
     }
 
     @Inject(method = "notifyNeighborsOfStateChange(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/Block;Z)V",
