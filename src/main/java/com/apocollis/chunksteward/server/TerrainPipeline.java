@@ -323,7 +323,7 @@ public final class TerrainPipeline {
                 + ", ready " + TABLE.readyCount()
                 + ", stolen " + TABLE.stolen.get()
                 + ", installed " + TABLE.installed.get()
-                + ", discarded " + TABLE.discarded.get()
+                + ", discarded " + TABLE.discarded.get() + " (" + TABLE.discardSummary(null) + ")"
                 + ", failed " + TABLE.failed.get()
                 + "; verify " + PipelineVerify.status();
     }
@@ -559,7 +559,7 @@ public final class TerrainPipeline {
         }
         if (job.context != null && !PipelinePreparers.valid(job.context, world, x, z)) {
             CHUNKS.remove(key, chunk);
-            TABLE.discardReady(dimension, x, z);
+            TABLE.discardReady(dimension, x, z, PipelineTable.D_INVALID);
             SPECULATIVE_READY.remove(key);
             return null;
         }
@@ -569,7 +569,7 @@ public final class TerrainPipeline {
             if (BiomeCheck.firstDifference(job.biomeSamples, server) >= 0) {
                 PipelineStats.biomeMismatch(job, server);
                 CHUNKS.remove(key, chunk);
-                TABLE.discardReady(dimension, x, z);
+                TABLE.discardReady(dimension, x, z, PipelineTable.D_BIOME);
                 SPECULATIVE_READY.remove(key);
                 return null;
             }
@@ -696,7 +696,8 @@ public final class TerrainPipeline {
             boolean stale = loaded || (!wanted.contains(key) && job.doneNanos != 0L && now - job.doneNanos > idleLimit);
             if (stale && job.state.get() == PipelineJob.DONE) {
                 CHUNKS.remove(key);
-                TABLE.discardReady(job.dimension, job.x, job.z);
+                TABLE.discardReady(job.dimension, job.x, job.z,
+                        loaded ? PipelineTable.D_LOADED : PipelineTable.D_IDLE);
                 SPECULATIVE_READY.remove(key);
             }
         }
@@ -832,7 +833,7 @@ public final class TerrainPipeline {
                 continue;
             }
             CHUNKS.remove(key);
-            TABLE.discardReady(key.dimension, key.x, key.z);
+            TABLE.discardReady(key.dimension, key.x, key.z, PipelineTable.D_EVICTED);
             return true;
         }
         return false;

@@ -17,6 +17,43 @@ final class PipelineTable {
     final AtomicLong stolen = new AtomicLong();
     final AtomicLong installed = new AtomicLong();
     final AtomicLong discarded = new AtomicLong();
+
+    /** Why a job's result or place in the queue was thrown away; {@link #discardLabel} names them. */
+    static final int D_QUEUED = 0;
+    static final int D_EPOCH = 1;
+    static final int D_DIMENSION = 2;
+    static final int D_INVALID = 3;
+    static final int D_BIOME = 4;
+    static final int D_LOADED = 5;
+    static final int D_IDLE = 6;
+    static final int D_EVICTED = 7;
+    private static final String[] DISCARD_LABELS = {"queued job dropped by the ranking", "late result after a reset",
+            "dimension reset", "result no longer valid", "biome mismatch", "chunk already loaded", "result nobody waited for",
+            "preload result evicted for a player"};
+    final java.util.concurrent.atomic.AtomicLongArray discardReasons = new java.util.concurrent.atomic.AtomicLongArray(8);
+
+    void discard(int reason) {
+        discarded.incrementAndGet();
+        discardReasons.incrementAndGet(reason);
+    }
+
+    /** "queued dropped 12, evicted preload 3": the non-zero reasons, as a count since {@code since} (null = total). */
+    String discardSummary(long[] since) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < discardReasons.length(); i++) {
+            long n = discardReasons.get(i) - (since == null ? 0L : since[i]);
+            if (since != null) {
+                since[i] = discardReasons.get(i);
+            }
+            if (n > 0) {
+                if (out.length() > 0) {
+                    out.append(", ");
+                }
+                out.append(DISCARD_LABELS[i]).append(' ').append(n);
+            }
+        }
+        return out.length() == 0 ? "-" : out.toString();
+    }
     final AtomicLong failed = new AtomicLong();
 
     void clear() {
@@ -26,6 +63,9 @@ final class PipelineTable {
         stolen.set(0L);
         installed.set(0L);
         discarded.set(0L);
+        for (int i = 0; i < discardReasons.length(); i++) {
+            discardReasons.set(i, 0L);
+        }
         failed.set(0L);
     }
 
@@ -87,7 +127,7 @@ final class PipelineTable {
         ready.put(key, job);
         if (job.epoch != epoch(job.dimension)) {
             if (ready.remove(key, job)) {
-                discarded.incrementAndGet();
+                discard(D_EPOCH);
             }
             job.state.set(PipelineJob.CANCELLED);
             return false;
@@ -131,7 +171,7 @@ final class PipelineTable {
             PipelineJob job = jobs.get(key);
             if (job != null && job.state.compareAndSet(PipelineJob.QUEUED, PipelineJob.CANCELLED)) {
                 jobs.remove(key, job);
-                discarded.incrementAndGet();
+                discard(D_QUEUED);
             }
         }
     }
@@ -147,14 +187,14 @@ final class PipelineTable {
     }
 
     /** Drops a ready result without counting it as installed. */
-    PipelineJob discardReady(int dimension, int x, int z) {
+    PipelineJob discardReady(int dimension, int x, int z, int reason) {
         PipelineKey key = new PipelineKey(dimension, x, z);
         PipelineJob job = ready.remove(key);
         if (job == null) {
             return null;
         }
         jobs.remove(key, job);
-        discarded.incrementAndGet();
+        discard(reason);
         return job;
     }
 
@@ -221,7 +261,7 @@ final class PipelineTable {
             PipelineJob job = jobs.remove(key);
             if (job != null && job.state.get() != PipelineJob.DONE && job.state.get() != PipelineJob.CANCELLED) {
                 job.state.set(PipelineJob.CANCELLED);
-                discarded.incrementAndGet();
+                discard(D_DIMENSION);
             }
             ready.remove(key);
         }

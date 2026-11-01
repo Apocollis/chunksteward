@@ -88,7 +88,7 @@ class PipelineTest {
         PipelineJob job = table.submit(0, 9, 9);
         assertTrue(table.claimWorker(job));
         assertTrue(table.publish(job));
-        assertSame(job, table.discardReady(0, 9, 9));
+        assertSame(job, table.discardReady(0, 9, 9, PipelineTable.D_EVICTED));
         assertEquals(1L, table.discarded.get());
         assertEquals(0L, table.installed.get());
         assertEquals(null, table.readyAt(0, 9, 9));
