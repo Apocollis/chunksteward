@@ -323,7 +323,7 @@ public final class TerrainPipeline {
                 + ", ready " + TABLE.readyCount()
                 + ", stolen " + TABLE.stolen.get()
                 + ", installed " + TABLE.installed.get()
-                + ", discarded " + TABLE.discarded.get() + " (" + TABLE.discardSummary(null) + ")"
+                + ", discarded " + TABLE.discarded.get() + " (" + TABLE.discardSummary(null) + PipelinePreparers.statusSuffix(null) + ")"
                 + ", failed " + TABLE.failed.get()
                 + "; verify " + PipelineVerify.status();
     }
@@ -557,7 +557,7 @@ public final class TerrainPipeline {
         if (chunk == null) {
             return null;
         }
-        if (job.context != null && !PipelinePreparers.valid(job.context, world, x, z)) {
+        if (job.context != null && !PipelinePreparers.valid(job.context, job.contextFailed, world, x, z)) {
             CHUNKS.remove(key, chunk);
             TABLE.discardReady(dimension, x, z, PipelineTable.D_INVALID);
             SPECULATIVE_READY.remove(key);
@@ -815,7 +815,11 @@ public final class TerrainPipeline {
         if (job.context == null) {
             WorldServer world = DimensionManager.getWorld(dimension);
             if (world != null) {
-                job.context = PipelinePreparers.prepare(world, x, z);
+                PreparerCore.Prepared prepared = PipelinePreparers.prepare(world, x, z);
+                if (prepared != null) {
+                    job.contextFailed = prepared.failed;
+                    job.context = prepared.contexts;
+                }
             }
         }
         return job;

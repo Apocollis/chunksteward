@@ -41,6 +41,7 @@ final class PipelineStats {
     private static long lastStolen;
     private static long lastInstalled;
     private static final long[] lastDiscardReasons = new long[8];
+    private static final java.util.Map<String, Long> lastPreparerDiscards = new java.util.HashMap<String, Long>();
     private static long lastDiscarded;
     private static long lastFailed;
 
@@ -180,7 +181,8 @@ final class PipelineStats {
         long discarded = table.discarded.get();
         long failed = table.failed.get();
         out.append("; installed ").append(installed - lastInstalled).append(", stolen back ").append(stolen - lastStolen)
-                .append(", discarded ").append(discarded - lastDiscarded).append(" (").append(table.discardSummary(lastDiscardReasons)).append(")")
+                .append(", discarded ").append(discarded - lastDiscarded).append(" (").append(table.discardSummary(lastDiscardReasons))
+                .append(PipelinePreparers.statusSuffix(lastPreparerDiscards)).append(")")
                 .append(", failed ").append(failed - lastFailed)
                 .append(", generated on server thread ").append(MAIN_GENERATED.getAndSet(0L));
         lastInstalled = installed;

@@ -123,7 +123,8 @@ public final class ChunkStewardAPI {
     /**
      * Contexts from each registered {@link JobPreparer#prepare}, in registration order, while a worker is inside
      * {@code generateChunk}. Null on any other thread, and null when nobody has registered. One preparer is a
-     * one-element array. (Version 3.)
+     * one-element array. An element is null for a preparer that sat the job out
+     * (or whose {@code prepare} threw; that job's worker chunk is discarded at install). (Version 3.)
      */
     public static Object currentJobContext() {
         return PacingView.jobContext();

@@ -29,6 +29,8 @@ final class PipelineJob {
     volatile boolean speculative;
     /** {@link com.apocollis.chunksteward.api.JobPreparer} contexts, or null. */
     volatile Object context;
+    /** A bit per preparer whose {@code prepare} threw for this job: its worker chunk is discarded at install. */
+    volatile long contextFailed;
 
     PipelineJob(int dimension, int x, int z, int epoch) {
         this.dimension = dimension;
