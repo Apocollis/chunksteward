@@ -171,6 +171,31 @@ public abstract class MixinWorldFeature {
         FeatureHooks.unsupported("notifyNeighborsOfStateChange");
     }
 
+    // Notification paths that reach the server's PlayerChunkMap (and the path listeners) through World.eventListeners,
+    // which a worker would iterate unsynchronized: the job aborts and runs inline.
+
+    @Inject(method = "notifyBlockUpdate(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;"
+            + "Lnet/minecraft/block/state/IBlockState;I)V", at = @At("HEAD"))
+    private void chunksteward$featureNotifyBlockUpdate(BlockPos pos, IBlockState oldState, IBlockState newState,
+                                                       int flags, CallbackInfo ci) {
+        FeatureHooks.unsupported("notifyBlockUpdate");
+    }
+
+    /** Added by Forge, so it has no SRG name: {@code remap = false}. */
+    @Inject(method = "markAndNotifyBlock(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/world/chunk/Chunk;"
+            + "Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/block/state/IBlockState;I)V",
+            at = @At("HEAD"), remap = false)
+    private void chunksteward$featureMarkAndNotify(BlockPos pos, Chunk chunk, IBlockState oldState,
+                                                   IBlockState newState, int flags, CallbackInfo ci) {
+        FeatureHooks.unsupported("markAndNotifyBlock");
+    }
+
+    @Inject(method = "markChunkDirty(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/tileentity/TileEntity;)V",
+            at = @At("HEAD"))
+    private void chunksteward$featureMarkChunkDirty(BlockPos pos, TileEntity tile, CallbackInfo ci) {
+        FeatureHooks.unsupported("markChunkDirty");
+    }
+
     // Reads of shared state a worker cannot take a consistent copy of: the job aborts and runs inline.
 
     @Inject(method = "getEntitiesWithinAABB(Ljava/lang/Class;Lnet/minecraft/util/math/AxisAlignedBB;)Ljava/util/List;",

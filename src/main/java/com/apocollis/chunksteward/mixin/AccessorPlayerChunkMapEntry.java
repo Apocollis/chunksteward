@@ -1,5 +1,6 @@
 package com.apocollis.chunksteward.mixin;
 
+import net.minecraft.server.management.PlayerChunkMap;
 import net.minecraft.server.management.PlayerChunkMapEntry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
@@ -16,6 +17,10 @@ public interface AccessorPlayerChunkMapEntry {
 
     @Accessor("changedSectionFilter")
     void chunksteward$changeMask(int mask);
+
+    /** The owning map ({@code field_187282_b}). */
+    @Accessor("playerChunkMap")
+    PlayerChunkMap chunksteward$map();
 
     @Accessor("changes")
     void chunksteward$changes(int changes);

@@ -1,8 +1,16 @@
 package com.apocollis.chunksteward.server;
 
+import com.apocollis.chunksteward.ChunkSteward;
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.management.PlayerChunkMap;
+import net.minecraft.server.management.PlayerChunkMapEntry;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
+
+import java.util.function.Consumer;
 
 /**
  * The entry points {@code MixinWorldFeature} calls. Each returns null (or false) when no feature job runs on the
@@ -101,5 +109,120 @@ public final class FeatureHooks {
         if (scope != null) {
             throw scope.abort("unsupported call: " + what);
         }
+    }
+
+    // ---- PlayerChunkMap thread guard ----------------------------------------------------------------------
+
+    /**
+     * The pure decision behind the {@code PlayerChunkMap} guards; true means the caller must cancel the vanilla call.
+     * A feature worker aborts its job. Any other off-thread caller is logged once per key with its stack trace (so the
+     * calling mod is visible) and the call is rescheduled onto the server thread. Only reached from the slow path,
+     * so it may allocate.
+     */
+    static boolean guardServerThread(boolean inFeatureScope, boolean isServerThread, String key,
+                                     Runnable scheduleOnMain, Consumer<String> abort, Consumer<String> warn) {
+        if (inFeatureScope) {
+            abort.accept(key);
+            return true;
+        }
+        if (isServerThread) {
+            return false;
+        }
+        if (FeatureStats.firstSeen("offthread:" + key)) {
+            warn.accept(key);
+        }
+        scheduleOnMain.run();
+        return true;
+    }
+
+    private static void warnOffThread(String key) {
+        ChunkSteward.LOGGER.warn("{} called off the server thread (thread {}); rescheduled onto it",
+                key, Thread.currentThread().getName(), new Throwable("off-thread " + key));
+    }
+
+    /** Cheap server-thread test; treats a map with no world or server (tests) as the server thread. */
+    private static boolean onServerThread(PlayerChunkMap map) {
+        WorldServer world = map.getWorldServer();
+        MinecraftServer server = world == null ? null : world.getMinecraftServer();
+        return server == null || server.isCallingFromMinecraftThread();
+    }
+
+    private static void runOnServer(PlayerChunkMap map, Runnable task) {
+        WorldServer world = map.getWorldServer();
+        if (world != null) {
+            world.addScheduledTask(task);
+        }
+    }
+
+    /** A rescheduled call must not touch an entry the map dropped in the meantime. */
+    private static boolean stillPresent(PlayerChunkMap map, PlayerChunkMapEntry entry) {
+        ChunkPos at = entry.getPos();
+        return map.getEntry(at.x, at.z) == entry;
+    }
+
+    /** True when the vanilla {@code markBlockForUpdate} must be skipped. No allocation on the server thread. */
+    public static boolean guardMarkBlock(final PlayerChunkMap map, BlockPos pos) {
+        boolean server = onServerThread(map);
+        boolean scope = FeatureScope.current() != null;
+        if (server && !scope) {
+            return false;
+        }
+        final BlockPos at = pos.toImmutable();
+        return guardServerThread(scope, server, "PlayerChunkMap.markBlockForUpdate", new Runnable() {
+            @Override
+            public void run() {
+                runOnServer(map, new Runnable() {
+                    @Override
+                    public void run() {
+                        map.markBlockForUpdate(at);
+                    }
+                });
+            }
+        }, FeatureHooks::unsupported, FeatureHooks::warnOffThread);
+    }
+
+    /** True when the vanilla {@code entryChanged} must be skipped. No allocation on the server thread. */
+    public static boolean guardEntryChanged(final PlayerChunkMap map, final PlayerChunkMapEntry entry) {
+        boolean server = onServerThread(map);
+        boolean scope = FeatureScope.current() != null;
+        if (server && !scope) {
+            return false;
+        }
+        return guardServerThread(scope, server, "PlayerChunkMap.entryChanged", new Runnable() {
+            @Override
+            public void run() {
+                runOnServer(map, new Runnable() {
+                    @Override
+                    public void run() {
+                        if (stillPresent(map, entry)) {
+                            map.entryChanged(entry);
+                        }
+                    }
+                });
+            }
+        }, FeatureHooks::unsupported, FeatureHooks::warnOffThread);
+    }
+
+    /** True when the vanilla {@code blockChanged} must be skipped. No allocation on the server thread. */
+    public static boolean guardBlockChanged(final PlayerChunkMap map, final PlayerChunkMapEntry entry,
+                                            final int x, final int y, final int z) {
+        boolean server = onServerThread(map);
+        boolean scope = FeatureScope.current() != null;
+        if (server && !scope) {
+            return false;
+        }
+        return guardServerThread(scope, server, "PlayerChunkMapEntry.blockChanged", new Runnable() {
+            @Override
+            public void run() {
+                runOnServer(map, new Runnable() {
+                    @Override
+                    public void run() {
+                        if (stillPresent(map, entry)) {
+                            entry.blockChanged(x, y, z);
+                        }
+                    }
+                });
+            }
+        }, FeatureHooks::unsupported, FeatureHooks::warnOffThread);
     }
 }
