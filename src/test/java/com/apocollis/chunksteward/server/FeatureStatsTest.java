@@ -30,4 +30,18 @@ class FeatureStatsTest {
         assertEquals("soot.handler.GenerationHandler", FeatureStats.culpritOf(stack));
         assertNull(FeatureStats.culpritOf(new StackTraceElement[] {stack[0], stack[1]}));
     }
+
+    @Test
+    void applyBreakdownShowsSegmentsAndTheResidual() {
+        long ms = 1_000_000L;
+        long[] parts = {2 * ms, 10 * ms, 4 * ms, 0, 6 * ms, 8 * ms};
+        String line = FeatureStats.formatApply(parts, 2, 40 * ms, 30, 24, 1, 3);
+        assertEquals(" (scope 1.0, replay 5.0, light 2.0, decoWait 0.0, inline 3.0, finish 4.0, other 5.0);"
+                + " journal writes 30, distinct 24; light-relevant stale windows 1 (chunks 3)", line);
+    }
+
+    @Test
+    void applyBreakdownIsEmptyWithoutJobs() {
+        assertEquals("", FeatureStats.formatApply(new long[FeatureStats.APPLY_SEGMENTS], 0, 0, 0, 0, 0, 0));
+    }
 }

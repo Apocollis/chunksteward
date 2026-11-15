@@ -413,41 +413,68 @@ public final class FeatureLane {
         }
         boolean previousFalling = BlockFalling.fallInstantly;
         BlockFalling.fallInstantly = true;
+        // Before PopulateScopes and the replay: the replay's own setBlockState calls bump the change counters.
+        int stale = from > 0 ? job.staleChunks() : 0;
+        long[] seg = new long[FeatureStats.APPLY_SEGMENTS];
+        long mark = System.nanoTime();
         PopulateScopes.begin(job.world, center);
+        seg[0] = System.nanoTime() - mark;
         try {
             if (from > 0) {
+                mark = System.nanoTime();
                 replay(job, state == FeatureJob.DONE ? Integer.MAX_VALUE : job.doneWrites,
                         state == FeatureJob.DONE ? Integer.MAX_VALUE : job.doneChecks);
+                seg[1] = System.nanoTime() - mark;
+                FeatureStats.windowStale(stale);
+                if (job.scope != null) {
+                    FeatureStats.journalWrites(job.scope.journal.size(), job.scope.journal.distinctWrites());
+                }
             }
+            mark = System.nanoTime();
             for (int i = 0; i < from; i++) {
                 FeatureStage done = job.stages.get(i);
                 if (done instanceof LightStage) {
                     ((LightStage) done).install(job);
                 }
             }
+            seg[2] = System.nanoTime() - mark;
             if (from < job.stages.size()) {
                 boolean decoLock = needsDecorationLock(job);
                 if (decoLock) {
+                    mark = System.nanoTime();
                     DECO.lock();
+                    seg[3] = System.nanoTime() - mark;
                 }
+                mark = System.nanoTime();
                 try {
                     for (int i = from; i < job.stages.size(); i++) {
                         job.stages.get(i).runInline();
                     }
                 } finally {
+                    seg[4] = System.nanoTime() - mark;
                     if (decoLock) {
                         DECO.unlock();
                     }
                 }
             }
+            mark = System.nanoTime();
             job.finish.run();
+            seg[5] = System.nanoTime() - mark;
             FeatureStats.count(FeatureStats.APPLIED);
         } catch (Throwable error) {
             ChunkSteward.LOGGER.error("staged populate failed at chunk {},{} in dimension {}",
                     job.x, job.z, job.dimension, error);
         } finally {
+            mark = System.nanoTime();
             PopulateScopes.end(job.world, center);
+            seg[0] += System.nanoTime() - mark;
             BlockFalling.fallInstantly = previousFalling;
+            FeatureStats.applyBreakdown(seg);
+            if (PipelineTrace.enabled()) {
+                PipelineTrace.event("feature_apply_done", job.dimension, job.x, job.z, "scope " + seg[0] / 1000L
+                        + "us replay " + seg[1] / 1000L + "us light " + seg[2] / 1000L + "us decoWait " + seg[3] / 1000L
+                        + "us inline " + seg[4] / 1000L + "us finish " + seg[5] / 1000L + "us stale " + stale);
+            }
         }
     }
 

@@ -106,6 +106,11 @@ final class FeatureJournal<S> {
         return writes.size();
     }
 
+    /** Distinct positions written; {@code size() - distinctWrites()} is the overwrites a coalescing replay would skip. */
+    int distinctWrites() {
+        return overlay.size();
+    }
+
     boolean isEmpty() {
         return writes.isEmpty() && checkCount == 0;
     }

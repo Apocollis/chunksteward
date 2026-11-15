@@ -86,6 +86,57 @@ public final class FeatureStats {
         APPLY_JOBS.incrementAndGet();
     }
 
+    /** Apply segments: scope, replay, light, decoWait, inline, finish. */
+    static final int APPLY_SEGMENTS = 6;
+    private static final AtomicLongArray APPLY_PARTS = new AtomicLongArray(APPLY_SEGMENTS);
+    private static final AtomicLong JOURNAL_WRITES = new AtomicLong();
+    private static final AtomicLong JOURNAL_DISTINCT = new AtomicLong();
+    private static final AtomicLong STALE_JOBS = new AtomicLong();
+    private static final AtomicLong STALE_CHUNKS = new AtomicLong();
+
+    /** One job's apply segments in nanoseconds, in the order above. */
+    static void applyBreakdown(long[] nanos) {
+        for (int i = 0; i < APPLY_SEGMENTS; i++) {
+            APPLY_PARTS.addAndGet(i, nanos[i]);
+        }
+    }
+
+    /** The whole journal of a job whose writes were replayed. */
+    static void journalWrites(int total, int distinct) {
+        JOURNAL_WRITES.addAndGet(total);
+        JOURNAL_DISTINCT.addAndGet(distinct);
+    }
+
+    /** A job whose window had {@code chunks} light-relevant changes between submit and apply. */
+    static void windowStale(int chunks) {
+        if (chunks > 0) {
+            STALE_JOBS.incrementAndGet();
+            STALE_CHUNKS.addAndGet(chunks);
+        }
+    }
+
+    /**
+     * The apply breakdown fragment: the six segment averages in ms, {@code other} (the apply time outside them), the
+     * journal's writes against distinct positions, and jobs whose window saw a light-relevant change (including the
+     * lane's own earlier replays into a neighbour). Empty when no job applied.
+     */
+    static String formatApply(long[] parts, long jobs, long totalNanos, long writes, long distinct,
+                              long staleJobs, long staleChunks) {
+        if (jobs == 0) {
+            return "";
+        }
+        long sum = 0L;
+        for (int i = 0; i < APPLY_SEGMENTS; i++) {
+            sum += parts[i];
+        }
+        return " (scope " + avgMs(parts[0], jobs) + ", replay " + avgMs(parts[1], jobs)
+                + ", light " + avgMs(parts[2], jobs) + ", decoWait " + avgMs(parts[3], jobs)
+                + ", inline " + avgMs(parts[4], jobs) + ", finish " + avgMs(parts[5], jobs)
+                + ", other " + avgMs(totalNanos - sum, jobs) + "); journal writes " + writes
+                + ", distinct " + distinct + "; light-relevant stale windows " + staleJobs
+                + " (chunks " + staleChunks + ")";
+    }
+
     static void waited(long nanos) {
         WAIT_NANOS.addAndGet(nanos);
         WAIT_JOBS.incrementAndGet();
@@ -173,6 +224,12 @@ public final class FeatureStats {
         long workNanos = WORK_NANOS.getAndSet(0L);
         long waitJobs = WAIT_JOBS.getAndSet(0L);
         long waitNanos = WAIT_NANOS.getAndSet(0L);
+        long applyNanos = APPLY_NANOS.getAndSet(0L);
+        long applyJobs = APPLY_JOBS.getAndSet(0L);
+        long[] applyParts = new long[APPLY_SEGMENTS];
+        for (int i = 0; i < APPLY_SEGMENTS; i++) {
+            applyParts[i] = APPLY_PARTS.getAndSet(i, 0L);
+        }
         long inline = n[INLINE_TILE] + n[INLINE_WINDOW] + n[INLINE_UNSUPPORTED] + n[INLINE_TIMEOUT] + n[INLINE_ERROR];
         long declined = n[DECLINED_QUEUE] + n[DECLINED_UNLOADED] + n[DECLINED_BUSY];
         StringBuilder out = new StringBuilder("staged populate: queued ").append(FeatureLane.queued())
@@ -203,7 +260,9 @@ public final class FeatureStats {
         out.append("; worker avg ").append(avgMs(workNanos, workJobs))
                 .append(" ms over ").append(workJobs)
                 .append(", wait avg ").append(avgMs(waitNanos, waitJobs)).append(" ms over ").append(waitJobs)
-                .append(", apply on the server thread avg ").append(avgMs(APPLY_NANOS.getAndSet(0L), APPLY_JOBS.getAndSet(0L))).append(" ms")
+                .append(", apply on the server thread avg ").append(avgMs(applyNanos, applyJobs)).append(" ms")
+                .append(formatApply(applyParts, applyJobs, applyNanos, JOURNAL_WRITES.getAndSet(0L),
+                        JOURNAL_DISTINCT.getAndSet(0L), STALE_JOBS.getAndSet(0L), STALE_CHUNKS.getAndSet(0L)))
                 .append("; session: submitted ").append(TOTAL.get(SUBMITTED))
                 .append(", on worker ").append(TOTAL.get(WORKER_OK))
                 .append(", inline ").append(TOTAL.get(INLINE_TILE) + TOTAL.get(INLINE_WINDOW)

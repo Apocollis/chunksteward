@@ -56,6 +56,19 @@ class FeatureJournalTest {
         assertEquals(2, journal.size());
         assertEquals("log", journal.writes().get(0).state);
         assertEquals("leaves", journal.writes().get(1).state);
+        assertEquals(1, journal.distinctWrites());
+    }
+
+    @Test
+    void distinctWritesCountsUniquePositions() {
+        FeatureJournal<String> journal = new FeatureJournal<>();
+        long a = FeatureJournal.pack(1, 64, 1);
+        long b = FeatureJournal.pack(2, 64, 1);
+        journal.write(a, "log", 2);
+        journal.write(b, "log", 2);
+        journal.write(a, "air", 2);
+        assertEquals(3, journal.size());
+        assertEquals(2, journal.distinctWrites());
     }
 
     @Test

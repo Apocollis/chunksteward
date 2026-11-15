@@ -38,6 +38,8 @@ public final class FeatureJob {
     volatile int doneWrites;
     volatile int doneChecks;
     volatile long workNanos;
+    /** {@link ChunkChanges} of each window chunk when the job was created; compared before the replay. */
+    private final int[] submitChanges;
 
     FeatureJob(WorldServer world, int x, int z, long seq, Chunk[] window, List<FeatureStage> stages,
                Runnable finish) {
@@ -49,6 +51,21 @@ public final class FeatureJob {
         this.window = window;
         this.stages = stages;
         this.finish = finish;
+        this.submitChanges = new int[window.length];
+        for (int i = 0; i < window.length; i++) {
+            submitChanges[i] = ((ChunkChanges) window[i]).chunksteward$changes();
+        }
+    }
+
+    /** Light-relevant window chunks changed since the job was created, counted before its own replay writes. */
+    int staleChunks() {
+        int stale = 0;
+        for (int i = 0; i < window.length; i++) {
+            if (((ChunkChanges) window[i]).chunksteward$changes() != submitChanges[i]) {
+                stale++;
+            }
+        }
+        return stale;
     }
 
     Chunk center() {
