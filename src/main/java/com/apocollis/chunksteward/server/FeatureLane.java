@@ -36,6 +36,12 @@ public final class FeatureLane {
     private static final ArrayDeque<FeatureJob> QUEUE = new ArrayDeque<FeatureJob>();
     /** Mutual exclusion for the decoration objects, which are shared and keep per-call state. */
     private static final ReentrantLock DECO = new ReentrantLock();
+    private static final ApplyDeferral.LockProbe DECO_PROBE = new ApplyDeferral.LockProbe() {
+        @Override
+        public boolean tryLock() {
+            return DECO.tryLock();
+        }
+    };
     private static FeatureJob running;
     private static long nextSeq;
     private static volatile int held;
@@ -302,28 +308,71 @@ public final class FeatureLane {
         }
     }
 
-    /** Tick end: apply finished jobs in creation order, within {@code features.promoteMs} (at least one). */
+    /** Counts the ticks {@link #onTickEnd} ran, so a job passed over twice in one tick is deferred once. */
+    private static long applyTick;
+
+    /**
+     * Tick end: apply finished jobs, oldest first, within {@code features.promoteMs} (at least one). A job that cannot
+     * go yet (a worker still runs it, or a worker holds the decoration lock its inline stages need) does not hold back
+     * a later job whose window does not overlap it; see {@link ApplyDeferral}.
+     */
     static void onTickEnd() {
         if (held == 0) {
             return;
         }
+        applyTick++;
         long deadline = System.nanoTime() + ChunkStewardConfig.features.promoteMs * 1_000_000L;
         boolean first = true;
         while (true) {
             FeatureJob job;
+            boolean lockHeld;
             synchronized (LOCK) {
-                job = QUEUE.peekFirst();
-                if (job == null || !isFinished(job)) {
+                if (QUEUE.isEmpty() || !first && System.nanoTime() > deadline) {
                     return;
                 }
-                if (!first && System.nanoTime() > deadline) {
+                int n = QUEUE.size();
+                FeatureJob[] jobs = QUEUE.toArray(new FeatureJob[n]);
+                int[] dimension = new int[n];
+                int[] x = new int[n];
+                int[] z = new int[n];
+                int[] deferrals = new int[n];
+                boolean[] finished = new boolean[n];
+                boolean[] needsLock = new boolean[n];
+                for (int i = 0; i < n; i++) {
+                    FeatureJob candidate = jobs[i];
+                    dimension[i] = candidate.dimension;
+                    x[i] = candidate.x;
+                    z[i] = candidate.z;
+                    deferrals[i] = candidate.deferrals;
+                    finished[i] = isFinished(candidate);
+                    needsLock[i] = finished[i] && needsInlineLock(candidate);
+                }
+                boolean[] deferred = new boolean[n];
+                boolean[] locked = new boolean[1];
+                // A job whose inline stages need the decoration lock must not park the server thread behind a worker:
+                // it stays in place (nothing applied yet), up to ApplyDeferral.MAX_DEFERRALS ticks.
+                int chosen = ApplyDeferral.pick(n, dimension, x, z, finished, needsLock, deferrals,
+                        ApplyDeferral.MAX_DEFERRALS, DECO_PROBE, deferred, locked);
+                for (int i = 0; i < n; i++) {
+                    if (deferred[i] && jobs[i].deferTick != applyTick) {
+                        jobs[i].deferTick = applyTick;
+                        jobs[i].deferrals++;
+                        FeatureStats.count(FeatureStats.DEFERRED);
+                    }
+                }
+                if (chosen < 0) {
                     return;
                 }
-                QUEUE.pollFirst();
+                job = jobs[chosen];
+                lockHeld = locked[0];
+                if (chosen > 0) {
+                    FeatureStats.count(FeatureStats.AHEAD);
+                }
+                QUEUE.remove(job);
                 held = QUEUE.size();
             }
             first = false;
-            apply(job);
+            apply(job, lockHeld);
         }
     }
 
@@ -381,21 +430,41 @@ public final class FeatureLane {
 
     /** Applies one finished job: the recorded writes (or the stages inline), then the rest of the chunk's populate. */
     private static void apply(FeatureJob job) {
+        apply(job, false);
+    }
+
+    /** {@code lockHeld}: the server thread already holds {@link #DECO} for this job's inline stages (see onTickEnd). */
+    private static void apply(FeatureJob job, boolean lockHeld) {
         long applyStarted = System.nanoTime();
         try {
-            applyJob(job);
+            applyJob(job, lockHeld);
         } finally {
             FeatureStats.applyTime(System.nanoTime() - applyStarted);
         }
     }
 
-    private static void applyJob(FeatureJob job) {
+    /** How many leading stages the worker completed: all of them for a done job, none for an abandoned one. */
+    private static int stagesDone(FeatureJob job) {
+        int state = job.state.get();
+        // A job the worker finished (failed) keeps the stages that completed; an abandoned job may still be running.
+        return state == FeatureJob.DONE ? job.stages.size()
+                : (state == FeatureJob.FAILED && job.scope != null ? job.doneStages : 0);
+    }
+
+    /** True when applying this job runs stages inline that use the shared decoration objects. */
+    private static boolean needsInlineLock(FeatureJob job) {
+        return stagesDone(job) < job.stages.size() && needsDecorationLock(job);
+    }
+
+    private static void applyJob(FeatureJob job, boolean lockHeld) {
         Chunk center = job.center();
         int state = job.state.get();
         boolean fallBack = state != FeatureJob.DONE;
-        // A job the worker finished (failed) keeps the stages that completed; an abandoned job may still be running.
-        int from = state == FeatureJob.DONE ? job.stages.size()
-                : (state == FeatureJob.FAILED && job.scope != null ? job.doneStages : 0);
+        int from = stagesDone(job);
+        if (job.deferrals > 0) {
+            FeatureStats.deferredFor(job.deferrals);
+        }
+        boolean holding = lockHeld;
         FeatureStats.waited(System.nanoTime() - job.createdNanos);
         PipelineTrace.event("feature_apply", job.dimension, job.x, job.z, "waited "
                 + (System.nanoTime() - job.createdNanos) / 1_000_000L + "ms worker " + job.workNanos / 1_000_000L + "ms "
@@ -434,15 +503,22 @@ public final class FeatureLane {
             for (int i = 0; i < from; i++) {
                 FeatureStage done = job.stages.get(i);
                 if (done instanceof LightStage) {
-                    ((LightStage) done).install(job);
+                    // A window chunk changed light-relevantly while the job ran: the worker's light was computed from
+                    // blocks that are gone, so the replayed writes and light checks make it the old way instead.
+                    if (stale > 0) {
+                        ((LightStage) done).discardStale();
+                    } else {
+                        ((LightStage) done).install(job);
+                    }
                 }
             }
             seg[2] = System.nanoTime() - mark;
             if (from < job.stages.size()) {
                 boolean decoLock = needsDecorationLock(job);
-                if (decoLock) {
+                if (decoLock && !holding) {
                     mark = System.nanoTime();
                     DECO.lock();
+                    holding = true;
                     seg[3] = System.nanoTime() - mark;
                 }
                 mark = System.nanoTime();
@@ -452,8 +528,9 @@ public final class FeatureLane {
                     }
                 } finally {
                     seg[4] = System.nanoTime() - mark;
-                    if (decoLock) {
+                    if (holding) {
                         DECO.unlock();
+                        holding = false;
                     }
                 }
             }
@@ -465,6 +542,10 @@ public final class FeatureLane {
             ChunkSteward.LOGGER.error("staged populate failed at chunk {},{} in dimension {}",
                     job.x, job.z, job.dimension, error);
         } finally {
+            if (holding) {
+                // The job failed before its inline stages ran: release the lock tryLock took in onTickEnd.
+                DECO.unlock();
+            }
             mark = System.nanoTime();
             PopulateScopes.end(job.world, center);
             seg[0] += System.nanoTime() - mark;
@@ -501,6 +582,7 @@ public final class FeatureLane {
         int category = job.failure == null ? FeatureStats.INLINE_TIMEOUT : FeatureStats.categoryOf(job.failure);
         FeatureStats.count(category);
         FeatureStats.culprit(job.culprit);
+        FeatureStats.reason(reason, job.culprit);
         FeatureScope scope = job.scope;
         if (scope != null && category != FeatureStats.INLINE_ERROR && scope.culpritGenerator() != null) {
             GeneratorPolicy.strike(scope.culpritGenerator(), reason);

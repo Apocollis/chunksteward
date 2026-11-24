@@ -28,7 +28,7 @@ When the terrain pipeline runs, a third line follows (`PipelineStats`):
 - `stolen back` and `generated on server thread`: chunks the server thread had to generate itself because no worker had started them, or a running one took too long (`pipeline.stealWaitMs`).
 
 With `features.enabled` a `staged populate:` line follows; see [staged-populate.md](staged-populate.md).
-The apply time on that line is broken down as described in [staged-populate.md](staged-populate.md) (scope, replay, light, decoWait, inline, finish, other).
+The apply time on that line is broken down as described in [staged-populate.md](staged-populate.md) (scope, replay, light, decoWait, inline, finish, other). `deferred applies N (longest wait M ticks), applied ahead K` counts jobs passed over for a tick because a worker held the decoration lock, the longest wait of a job that was applied, and the jobs applied ahead of an older one that could not go yet. `stale discarded` (in the light stage fragment) counts jobs whose worker light was dropped because their window changed light-relevantly before the apply. `abort reasons (session)` is the top five fallback reasons with their classes.
 
 `logging.pipelineTrace = true` also writes `logs/chunksteward-trace.csv` (`ms,event,dimension,x,z,detail`): `claim` (worker slot, queue wait), `done` or `fail` (worker time), `install` (ready wait), `server` (generated on the server thread, and why), `feature_submit`, `feature_apply` (wait, worker time, ok or why it ran inline). Sort by chunk to follow one chunk through the pipeline. Capped at 400000 lines per session; events are dropped, not delayed, when the writer is behind.
 

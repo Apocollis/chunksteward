@@ -41,6 +41,17 @@ class FeatureStatsTest {
     }
 
     @Test
+    void reasonKeyDropsCoordinatesAndKeepsTheCause() {
+        assertEquals("write outside the window", FeatureStats.reasonKey("write outside the window at 1,2,3"));
+        assertEquals("read outside the window", FeatureStats.reasonKey("read outside the window at chunk 1,2"));
+        assertEquals("tile entity block charm:crate_sealed",
+                FeatureStats.reasonKey("tile entity block charm:crate_sealed at 1064,32,-6095"));
+        assertEquals("unsupported call: markAndNotifyBlock", FeatureStats.reasonKey("unsupported call: markAndNotifyBlock"));
+        assertEquals("no result", FeatureStats.reasonKey(null));
+        assertEquals(80, FeatureStats.reasonKey(new String(new char[200]).replace('\0', 'x')).length());
+    }
+
+    @Test
     void applyBreakdownIsEmptyWithoutJobs() {
         assertEquals("", FeatureStats.formatApply(new long[FeatureStats.APPLY_SEGMENTS], 0, 0, 0, 0, 0, 0));
     }

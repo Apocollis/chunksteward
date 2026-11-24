@@ -103,6 +103,21 @@ public final class FeatureHooks {
         }
     }
 
+    /**
+     * {@code World.immediateBlockTick} from a feature job: runs the block's {@code updateTick} without setting
+     * {@code scheduledUpdatesAreImmediate}, which is shared with the server thread and would stay set if the tick
+     * aborts. Nothing is lost: {@code scheduleUpdate} and {@code updateBlockTick}, the flag's only readers, abort a
+     * job before they look at it. False when no job runs on this thread, so the caller runs the vanilla sequence.
+     */
+    public static boolean immediateBlockTick(net.minecraft.world.World world, BlockPos pos, IBlockState state,
+                                             java.util.Random rand) {
+        if (FeatureScope.current() == null) {
+            return false;
+        }
+        state.getBlock().updateTick(world, pos, state, rand);
+        return true;
+    }
+
     /** A call a worker cannot make: aborts the job running on this thread, does nothing on other threads. */
     public static void unsupported(String what) {
         FeatureScope scope = FeatureScope.current();

@@ -44,7 +44,13 @@ public final class FeatureStats {
     static final int AUDIT_CHANGED = 20;
     static final int AUDIT_FAILED = 21;
     static final int AUDIT_CHUNKS = 22;
-    private static final int COUNTERS = 23;
+    /** A finished job passed over for a tick because a worker held the decoration lock it needs. */
+    static final int DEFERRED = 23;
+    /** A job applied ahead of an older one that could not go yet (unfinished, or waiting for the decoration lock). */
+    static final int AHEAD = 24;
+    /** A job's worker light dropped because its window changed light-relevantly before the apply. */
+    static final int LIGHT_STALE = 25;
+    private static final int COUNTERS = 26;
 
     private static final AtomicLongArray INTERVAL = new AtomicLongArray(COUNTERS);
     private static final AtomicLongArray TOTAL = new AtomicLongArray(COUNTERS);
@@ -55,6 +61,7 @@ public final class FeatureStats {
     private static final AtomicLong WAIT_NANOS = new AtomicLong();
     private static final AtomicLong WAIT_JOBS = new AtomicLong();
     private static final Map<String, long[]> CULPRITS = new HashMap<String, long[]>();
+    private static final Map<String, long[]> REASONS = new HashMap<String, long[]>();
     private static final Map<String, long[]> GEN_WORK = new HashMap<String, long[]>();
     private static final Set<String> SEEN = new HashSet<String>();
 
@@ -93,6 +100,15 @@ public final class FeatureStats {
     private static final AtomicLong JOURNAL_DISTINCT = new AtomicLong();
     private static final AtomicLong STALE_JOBS = new AtomicLong();
     private static final AtomicLong STALE_CHUNKS = new AtomicLong();
+    private static final AtomicLong DEFER_MAX = new AtomicLong();
+
+    /** A job applied after waiting {@code ticks} server ticks for the decoration lock. */
+    static void deferredFor(int ticks) {
+        long seen;
+        while (ticks > (seen = DEFER_MAX.get()) && !DEFER_MAX.compareAndSet(seen, ticks)) {
+            // retry
+        }
+    }
 
     /** One job's apply segments in nanoseconds, in the order above. */
     static void applyBreakdown(long[] nanos) {
@@ -151,6 +167,38 @@ public final class FeatureStats {
             long[] cell = CULPRITS.get(name);
             if (cell == null) {
                 CULPRITS.put(name, cell = new long[1]);
+            }
+            cell[0]++;
+        }
+    }
+
+    /** The most distinct reason + class pairs kept, so a stream of odd reasons cannot grow the map. */
+    private static final int MAX_REASONS = 200;
+
+    /**
+     * A stable key for a fallback reason: the text before the first {@code " at "} (coordinates differ per job), cut to
+     * 80 characters. {@code "write outside the window at 1,2,3"} becomes {@code "write outside the window"} and
+     * {@code "tile entity block charm:crate at 1,2,3"} becomes {@code "tile entity block charm:crate"}.
+     */
+    static String reasonKey(String reason) {
+        if (reason == null) {
+            return "no result";
+        }
+        int at = reason.indexOf(" at ");
+        String key = at > 0 ? reason.substring(0, at) : reason;
+        return key.length() > 80 ? key.substring(0, 80) : key;
+    }
+
+    /** A job fell back for {@code reason}, caused by the class {@code culprit} (null when unknown). */
+    static void reason(String reason, String culprit) {
+        String key = reasonKey(reason) + " <- " + (culprit == null ? "unknown" : shortName(culprit));
+        synchronized (REASONS) {
+            long[] cell = REASONS.get(key);
+            if (cell == null) {
+                if (REASONS.size() >= MAX_REASONS) {
+                    return;
+                }
+                REASONS.put(key, cell = new long[1]);
             }
             cell[0]++;
         }
@@ -255,6 +303,7 @@ public final class FeatureStats {
         }
         if (ChunkStewardConfig.features.lightStage) {
             out.append("; light stage installed ").append(n[LIGHT_INSTALLED]).append(", fell back ").append(n[LIGHT_FALLBACK])
+                    .append(", stale discarded ").append(n[LIGHT_STALE])
                     .append(", boundary checks ").append(n[LIGHT_BOUNDARY]);
         }
         out.append("; worker avg ").append(avgMs(workNanos, workJobs))
@@ -263,16 +312,22 @@ public final class FeatureStats {
                 .append(", apply on the server thread avg ").append(avgMs(applyNanos, applyJobs)).append(" ms")
                 .append(formatApply(applyParts, applyJobs, applyNanos, JOURNAL_WRITES.getAndSet(0L),
                         JOURNAL_DISTINCT.getAndSet(0L), STALE_JOBS.getAndSet(0L), STALE_CHUNKS.getAndSet(0L)))
+                .append("; deferred applies ").append(n[DEFERRED]).append(" (longest wait ")
+                .append(DEFER_MAX.getAndSet(0L)).append(" ticks), applied ahead ").append(n[AHEAD])
                 .append("; session: submitted ").append(TOTAL.get(SUBMITTED))
                 .append(", on worker ").append(TOTAL.get(WORKER_OK))
                 .append(", inline ").append(TOTAL.get(INLINE_TILE) + TOTAL.get(INLINE_WINDOW)
                         + TOTAL.get(INLINE_UNSUPPORTED) + TOTAL.get(INLINE_TIMEOUT) + TOTAL.get(INLINE_ERROR));
         out.append(SpawnerPause.reportAndReset());
-        String culprits = top(CULPRITS, 3, false);
+        String culprits = top(CULPRITS, 3, false, true);
         if (!culprits.isEmpty()) {
             out.append("; aborts by class (session) ").append(culprits);
         }
-        String generators = top(GEN_WORK, 3, true);
+        String reasons = top(REASONS, 5, false, false);
+        if (!reasons.isEmpty()) {
+            out.append("; abort reasons (session) ").append(reasons);
+        }
+        String generators = top(GEN_WORK, 3, true, true);
         if (!generators.isEmpty()) {
             out.append("; worker time by generator ").append(generators);
         }
@@ -287,7 +342,7 @@ public final class FeatureStats {
     }
 
     /** The {@code limit} largest entries of a map of long cells, as "name x count" or "name ms". */
-    private static String top(final Map<String, long[]> map, int limit, final boolean millis) {
+    private static String top(final Map<String, long[]> map, int limit, final boolean millis, boolean shorten) {
         List<Map.Entry<String, long[]>> rows;
         synchronized (map) {
             rows = new ArrayList<Map.Entry<String, long[]>>(map.size());
@@ -307,7 +362,7 @@ public final class FeatureStats {
                 out.append(", ");
             }
             Map.Entry<String, long[]> row = rows.get(i);
-            out.append(shortName(row.getKey())).append(' ');
+            out.append(shorten ? shortName(row.getKey()) : row.getKey()).append(' ');
             if (millis) {
                 out.append(String.format("%.0f ms/%d", row.getValue()[0] / 1.0e6, row.getValue()[1]));
             } else {

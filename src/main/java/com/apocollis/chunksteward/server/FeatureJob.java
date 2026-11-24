@@ -38,6 +38,10 @@ public final class FeatureJob {
     volatile int doneWrites;
     volatile int doneChecks;
     volatile long workNanos;
+    /** Server ticks this finished job was passed over because a worker held the decoration lock it needs. */
+    int deferrals;
+    /** The {@code onTickEnd} count of the tick that last deferred this job, so one tick counts once. */
+    long deferTick;
     /** {@link ChunkChanges} of each window chunk when the job was created; compared before the replay. */
     private final int[] submitChanges;
 

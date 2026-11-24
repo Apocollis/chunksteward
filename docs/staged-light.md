@@ -54,3 +54,5 @@ The same engine can audit chunks that are already loaded. `light verify` showed 
 ## Precipitation height
 
 The adapter records, per column of the 34x34 box, one above the highest block from Y 1 up whose material blocks movement or is a liquid, which is what `Chunk.getPrecipitationHeight` computes (and caches) for rain and snow. The install copies it into each chunk's precipitation height map. Without it the install had to reset the cache, and the first read of each column (Serene Seasons reads all of them after a populate) walked the chunk on the server thread. `light verify` compares the worker's value with vanilla's walk for every column of each window it checks.
+
+A job whose window changed light-relevantly between submit and apply does not install the worker's light: it is discarded (`stale discarded`) and the replayed writes' light checks and the relight queue of the mods settle it. The `features.lightStage` default stays off until `light verify` over 20 or more chunks shows no worker-darker nibbles.

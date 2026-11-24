@@ -71,6 +71,17 @@ final class LightStage implements FeatureStage {
         FeatureStats.count(FeatureStats.LIGHT_FALLBACK);
     }
 
+    /**
+     * Server thread: drops the worker's light because a chunk of the window changed (light-relevantly) after the job
+     * was submitted. The replay's own light checks and the mods' deferred relight then settle it the old way.
+     */
+    void discardStale() {
+        if (result != null) {
+            result = null;
+            FeatureStats.count(FeatureStats.LIGHT_STALE);
+        }
+    }
+
     /** Server thread, after the job's writes were replayed: installs what the worker computed. */
     void install(FeatureJob job) {
         LightResult light = result;

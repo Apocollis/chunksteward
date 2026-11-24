@@ -14,7 +14,9 @@ import net.minecraft.world.storage.MapStorage;
 import com.google.common.base.Predicate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Random;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -169,6 +171,31 @@ public abstract class MixinWorldFeature {
             at = @At("HEAD"))
     private void chunksteward$featureNotify(BlockPos pos, Block block, boolean updateObservers, CallbackInfo ci) {
         FeatureHooks.unsupported("notifyNeighborsOfStateChange");
+    }
+
+    /** {@code field_72999_e}: when true, {@code WorldServer.updateBlockTick} runs a block's tick instead of queuing it. */
+    @Shadow
+    protected boolean scheduledUpdatesAreImmediate;
+
+    /**
+     * Vanilla sets {@code scheduledUpdatesAreImmediate}, ticks the block and clears the flag with no {@code finally}.
+     * A feature job aborting inside the tick left it set on the shared world, and every later
+     * {@code BlockFrostedIce.updateTick} recursed until the stack overflowed. In a job the flag is never written (see
+     * {@link FeatureHooks#immediateBlockTick}); elsewhere the same sequence runs with the flag cleared in a {@code finally}.
+     */
+    @Inject(method = "immediateBlockTick(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;"
+            + "Ljava/util/Random;)V", at = @At("HEAD"), cancellable = true)
+    private void chunksteward$immediateTick(BlockPos pos, IBlockState state, Random rand, CallbackInfo ci) {
+        World self = (World) (Object) this;
+        if (!FeatureHooks.immediateBlockTick(self, pos, state, rand)) {
+            this.scheduledUpdatesAreImmediate = true;
+            try {
+                state.getBlock().updateTick(self, pos, state, rand);
+            } finally {
+                this.scheduledUpdatesAreImmediate = false;
+            }
+        }
+        ci.cancel();
     }
 
     // Notification paths that reach the server's PlayerChunkMap (and the path listeners) through World.eventListeners,
